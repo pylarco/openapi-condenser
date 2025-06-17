@@ -1,7 +1,8 @@
 import { atom } from 'jotai';
 import { client } from '../client';
 import type { OutputFormat, SpecStats } from '../../shared/types';
-import { defaultConfig, DEFAULT_SPEC_FILENAME } from '../constants';
+import { DEFAULT_SPEC_FILENAME } from '../constants';
+import { defaultConfig } from '../../shared/constants';
 
 // --- Base State Atoms ---
 export const specContentAtom = atom<string>('');

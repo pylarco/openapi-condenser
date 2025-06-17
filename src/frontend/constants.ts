@@ -1,27 +1,7 @@
 import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { markdown } from '@codemirror/lang-markdown';
-import type { FilterOptions, TransformOptions, OutputFormat } from '../shared/types';
-
-// --- Default Config ---
-export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
+import type { OutputFormat } from '../shared/types';
 
 // --- Input Panel ---
 export const INPUT_DEBOUNCE_DELAY = 300; // ms

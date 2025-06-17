@@ -1,4 +1,6 @@
 import { OpenAPIV3 } from 'openapi-types';
+import { contentTypeMappings } from '../constants';
+import { HTTP_METHODS } from '../../shared/constants';
 
 const resolveRef = <T extends object>(
   refObj: OpenAPIV3.ReferenceObject | T,
@@ -29,14 +31,6 @@ const formatSchemaType = (
   }
   return schema.type || 'any';
 };
-
-const contentTypeMappings: ReadonlyArray<[string, string]> = [
-    ['json', 'json'],
-    ['form-data', 'form-data'],
-    ['x-www-form-urlencoded', 'form-urlencoded'],
-    ['xml', 'xml'],
-    ['text/plain', 'text'],
-];
 
 const shortenContentType = (contentType: string): string => {
     for (const [key, shortName] of contentTypeMappings) {
@@ -193,7 +187,7 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
       if (!pathItem) continue;
       
       const validMethods = Object.keys(pathItem).filter(method => 
-        ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'].includes(method)
+        HTTP_METHODS.includes(method as any)
       ) as (keyof typeof pathItem)[];
 
       for (const method of validMethods) {

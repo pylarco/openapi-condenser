@@ -5,6 +5,7 @@ import { getFormatter } from './formatters';
 import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
+import { HTTP_METHODS } from '../shared/constants';
 
 export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   if (!spec || typeof spec !== 'object') {
@@ -20,7 +21,7 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   // 1 token is roughly 4 characters for English text. Use compact for better estimation.
   const tokenCount = Math.ceil(compactSpecString.length / 4);
 
-  const validMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+  const validMethods = new Set(HTTP_METHODS);
   const paths = Object.keys(spec.paths || {});
   const operations = paths.reduce((count, path) => {
     const pathItem = spec.paths[path];

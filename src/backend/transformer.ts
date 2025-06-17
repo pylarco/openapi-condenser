@@ -7,6 +7,7 @@ import {
 } from './types';
 import micromatch from 'micromatch';
 import { OpenAPIV3 } from 'openapi-types';
+import { HTTP_METHODS } from '../shared/constants';
 
 /**
  * Checks if an endpoint's tags match the provided patterns.
@@ -70,12 +71,8 @@ export const filterPaths = (
   }, {} as OpenAPIV3.PathsObject);
 };
 
-const httpMethods: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-
 function isHttpMethod(method: string): method is HttpMethod {
-  return httpMethods.includes(method as HttpMethod);
+  return HTTP_METHODS.includes(method as HttpMethod);
 }
 
 /**
@@ -342,7 +339,7 @@ export const transformOpenAPI = (
       for (const path in transformed.paths) {
         const pathItem = transformed.paths[path];
         if (pathItem) {
-          for (const method of httpMethods) {
+          for (const method of HTTP_METHODS) {
             const operation = pathItem[method] as
               | OpenAPIV3.OperationObject
               | undefined;
