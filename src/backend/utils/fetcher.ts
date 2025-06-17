@@ -20,10 +20,7 @@ export const fetchSpec = async (
     } else {
       const response = await fetch(source.path);
       if (!response.ok) {
-        return {
-          success: false,
-          errors: [`Failed to fetch remote spec: ${response.status} ${response.statusText}`]
-        };
+        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
       }
       content = await response.text();
       contentType = response.headers.get('Content-Type');
@@ -35,10 +32,7 @@ export const fetchSpec = async (
       data,
     };
   } catch (error) {
-    return {
-      success: false,
-      errors: [`Error processing spec: ${error instanceof Error ? error.message : String(error)}`]
-    };
+    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 

@@ -33,7 +33,7 @@ const isPrivateIP = (ip: string) => {
   );
 };
 
-const app = new Elysia()
+export const app = new Elysia()
   .use(swagger())
   .get('/api/fetch-spec', async ({ query: { url }, set }) => {
     if (!url) {
@@ -195,9 +195,11 @@ const app = new Elysia()
         })
       }
     }
-  )
-  .listen(3000);
-
-console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+  );
 
 export type App = typeof app;
+
+if (import.meta.main) {
+  app.listen(3000);
+  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+}

@@ -1,12 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
----
----
-description: 
-globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 1. while addressing fail tests, always have a mindset that there must be main program core error to fix rather than make test less strict!!
 2. Test cases should be isolated and clean no left over even on sigterm

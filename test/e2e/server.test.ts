@@ -15,7 +15,10 @@ describe('E2E API Tests', () => {
   beforeAll(() => {
     // Start server on a random available port
     server = app.listen(0);
-    const { port } = server;
+    const port = server.server?.port;
+    if (!port) {
+        throw new Error('Server port not available');
+    }
     api = treaty<App>(`http://localhost:${port}`);
   });
 
@@ -41,26 +44,42 @@ describe('E2E API Tests', () => {
         // @ts-expect-error - testing invalid input
         const { error, status } = await api['api']['fetch-spec'].get({ query: {} });
         expect(status).toBe(400);
-        expect(error?.value.error).toBe('URL parameter is required');
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toBe('URL parameter is required');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
     });
 
     it('should return 400 for an invalid URL format', async () => {
         const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'not-a-url' } });
         expect(status).toBe(400);
-        expect(error?.value.error).toStartWith('Invalid URL provided');
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toStartWith('Invalid URL provided');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
     });
     
     it('should return 403 when trying to fetch from a private network address (SSRF protection)', async () => {
         const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'http://127.0.0.1/spec.json' } });
         expect(status).toBe(403);
-        expect(error?.value.error).toBe('Fetching specs from private or local network addresses is forbidden.');
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toBe('Fetching specs from private or local network addresses is forbidden.');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
     });
 
     it('should handle non-existent remote files gracefully', async () => {
         const nonExistentUrl = 'https://example.com/non-existent-spec.json';
         const { error, status } = await api['api']['fetch-spec'].get({ query: { url: nonExistentUrl } });
         expect(status).toBe(404);
-        expect(error?.value.error).toInclude('Failed to fetch spec');
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toInclude('Failed to fetch spec');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
     });
   });
 
@@ -80,10 +99,15 @@ describe('E2E API Tests', () => {
       expect(data?.data).toBeString();
 
       // Check if the output is valid YAML
-      let parsedYaml;
+      let parsedYaml: any;
       expect(() => parsedYaml = YAML.parse(data!.data)).not.toThrow();
-      expect(parsedYaml.openapi).toBe('3.0.0');
-      expect(parsedYaml.info.title).toBe('Sample API');
+      
+      if(parsedYaml) {
+        expect(parsedYaml.openapi).toBe('3.0.0');
+        expect(parsedYaml.info.title).toBe('Sample API');
+      } else {
+        throw new Error('parsedYaml should not be undefined');
+      }
     });
     
     it('should condense a spec to Markdown format', async () => {
@@ -218,8 +242,13 @@ describe('E2E API Tests', () => {
         });
 
         expect(status).toBe(400);
-        expect(error?.value.success).toBe(false);
-        expect(error?.value.errors).toInclude('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
+
+        if (error?.value && 'success' in error.value && 'errors' in error.value) {
+            expect(error.value.success).toBe(false);
+            expect(error.value.errors).toInclude('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
     });
   });
 });
