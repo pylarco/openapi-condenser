@@ -86,7 +86,7 @@ const resolveDns = async (hostname: string): Promise<string[]> => {
 export const app = new Elysia({ prefix: '/api' })
   .use(swagger())
   .use(cors({
-    origin: /^http:\/\/localhost(:\d+)?$/,
+    origin: '*', // Allow any origin for Cloudflare Workers deployment
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,

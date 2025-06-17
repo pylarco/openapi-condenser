@@ -82,6 +82,40 @@ const config: ExtractorConfig = {
 export default config;
 ```
 
+## Deployment to Cloudflare Workers
+
+This project is set up to deploy to Cloudflare Workers, which will host both the frontend and backend applications.
+
+### Prerequisites
+
+1. A Cloudflare account
+2. Wrangler CLI installed and authenticated with your Cloudflare account
+
+### Deployment Steps
+
+1. Authenticate Wrangler with your Cloudflare account:
+   ```
+   npx wrangler login
+   ```
+
+2. Build and deploy the application:
+   ```
+   npm run deploy
+   ```
+
+3. Once deployed, your application will be available at the URL shown in the deployment output.
+
+### Configuration
+
+The deployment is configured in the `wrangler.toml` file. You can customize the following:
+
+- `name`: The name of your worker
+- `compatibility_date`: The compatibility date for your worker
+- `[vars]`: Environment variables for your worker
+- `[triggers]`: Scheduled triggers for your worker
+
+For more detailed configuration options, see the [Wrangler documentation](https://developers.cloudflare.com/workers/wrangler/configuration/).
+
 ## License
 
 MIT

@@ -1,0 +1,20 @@
+name = "openapi-condenser"
+main = "dist/worker.js"
+compatibility_date = "2023-10-30"
+
+# Configure static assets to be served from the "dist" directory
+[site]
+bucket = "./dist"
+entry-point = "."
+
+# Add your environment variables below if needed
+# [vars]
+# MY_VARIABLE = "value"
+
+# Configure build
+[build]
+command = "npm run build"
+
+# Triggers to run before the deployment
+[triggers]
+crons = [] 
