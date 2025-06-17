@@ -2,6 +2,12 @@ import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useSetAtom, useAtom } from 'jotai';
 import { client } from '../../../client';
 import { specContentAtom, fileNameAtom } from '../../../state/atoms';
+import { 
+  INPUT_DEBOUNCE_DELAY, 
+  URL_FETCH_DEBOUNCE_DELAY,
+  DEFAULT_SPEC_FILENAME,
+  DEFAULT_URL_FILENAME
+} from '../../../constants';
 
 interface InputPanelProps {
   // No props needed after Jotai integration
@@ -37,7 +43,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
       if (specContent !== localSpecContent) {
         setSpecContent(localSpecContent);
       }
-    }, 300); // 300ms debounce delay
+    }, INPUT_DEBOUNCE_DELAY);
 
     return () => {
       clearTimeout(handler);
@@ -71,7 +77,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
 
   const handlePasteChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setLocalSpecContent(event.target.value);
-    setFileName('spec.json'); // Assume json for pasted content
+    setFileName(DEFAULT_SPEC_FILENAME); // Assume json for pasted content
     setFetchError(null);
     setUploadedFileName(null);
   }, [setFileName]);
@@ -119,9 +125,9 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
           }
           try {
             const urlObject = new URL(url);
-            setFileName(urlObject.pathname.split('/').pop() || 'spec.from.url');
+            setFileName(urlObject.pathname.split('/').pop() || DEFAULT_URL_FILENAME);
           } catch {
-            setFileName('spec.from.url');
+            setFileName(DEFAULT_URL_FILENAME);
           }
         }
       } catch (err) {
@@ -134,7 +140,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
     if (activeTab === 'url') {
       const handler = setTimeout(() => {
         fetchSpecFromUrl();
-      }, 500); // 500ms debounce
+      }, URL_FETCH_DEBOUNCE_DELAY);
 
       return () => clearTimeout(handler);
     }

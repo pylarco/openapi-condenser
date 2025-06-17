@@ -1,30 +1,11 @@
 import { atom } from 'jotai';
 import { client } from '../client';
-import type { FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../../backend/types';
-
-// --- Default Config ---
-const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
+import type { OutputFormat, SpecStats } from '../../shared/types';
+import { defaultConfig, DEFAULT_SPEC_FILENAME } from '../constants';
 
 // --- Base State Atoms ---
 export const specContentAtom = atom<string>('');
-export const fileNameAtom = atom<string>('spec.json');
+export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
 export const configAtom = atom(defaultConfig);
 export const outputFormatAtom = atom<OutputFormat>('markdown');
 

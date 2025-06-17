@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAtom } from 'jotai';
-import type { FilterOptions, TransformOptions, OutputFormat } from '../../../../backend/types';
+import type { FilterOptions, TransformOptions, OutputFormat } from '../../../../shared/types';
 import { configAtom, outputFormatAtom } from '../../../state/atoms';
 import { Section, Switch, TextInput } from '../../ui';
 

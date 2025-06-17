@@ -52,6 +52,7 @@ src/frontend/components/ui/TextInput.tsx
 src/frontend/components/ui/Tooltip.tsx
 src/frontend/main.tsx
 src/frontend/state/atoms.ts
+src/frontend/state/motion.reuse.tsx
 src/frontend/styles.css
 tsconfig.json
 vite.config.ts
@@ -309,32 +310,6 @@ export const Section: React.FC<{ title: string, children: React.ReactNode }> = (
 );
 ```
 
-## File: src/frontend/components/ui/TextInput.tsx
-```typescript
-import React from 'react';
-import { Tooltip } from './Tooltip';
-
-export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => (
-    <div>
-        <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </label>
-        <input 
-            type="text"
-            placeholder={placeholder}
-            value={value?.join(', ')}
-            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-        />
-    </div>
-));
-```
-
 ## File: src/frontend/components/ui/Tooltip.tsx
 ```typescript
 import React from 'react';
@@ -363,6 +338,97 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 ```
 
+## File: src/frontend/state/motion.reuse.tsx
+```typescript
+import { useLayoutEffect, useRef } from 'react'
+import gsap from 'gsap'
+
+export const usePanelEntrance = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return
+
+    gsap.from(el.current, {
+      opacity: 0,
+      y: 50,
+      duration: 0.5,
+      ease: 'power3.out',
+    })
+  }, [el])
+}
+
+export const useButtonHover = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, { scale: 1.05, duration: 0.2, ease: 'power2.out' });
+
+    const onEnter = () => tl.play();
+    const onLeave = () => tl.reverse();
+
+    el.current.addEventListener('mouseenter', onEnter);
+    el.current.addEventListener('mouseleave', onLeave);
+
+    return () => {
+      el.current?.removeEventListener('mouseenter', onEnter);
+      el.current?.removeEventListener('mouseleave', onLeave);
+    }
+  }, [el]);
+}
+
+export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
+
+    const input = el.current.querySelector('input, textarea');
+    if (!input) return;
+
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, {
+      boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.5)',
+      borderColor: 'rgb(34 211 238)',
+      duration: 0.2,
+      ease: 'power2.out'
+    });
+
+    const onFocus = () => tl.play();
+    const onBlur = () => tl.reverse();
+
+    input.addEventListener('focus', onFocus);
+    input.addEventListener('blur', onBlur);
+
+    return () => {
+      input.removeEventListener('focus', onFocus);
+      input.removeEventListener('blur', onBlur);
+    }
+  }, [el]);
+}
+
+export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
+  const timeline = useRef(gsap.timeline({ paused: true }));
+
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const knob = el.current.nextElementSibling?.nextElementSibling;
+    const background = el.current.nextElementSibling;
+    if (!knob || !background) return;
+
+    timeline.current.clear().to(background, {
+      backgroundColor: checked ? 'rgb(6 182 212)' : 'rgb(71 85 105)',
+      duration: 0.2,
+      ease: 'power2.inOut'
+    }).to(knob, {
+      x: checked ? 16 : 0,
+      duration: 0.2,
+      ease: 'power2.inOut'
+    }, '<');
+  }, []);
+
+  useLayoutEffect(() => {
+    timeline.current.play();
+  }, [checked]);
+}
+```
+
 ## File: vite.config.ts
 ```typescript
 import { defineConfig } from 'vite'
@@ -377,35 +443,6 @@ export default defineConfig({
     }
   }
 })
-```
-
-## File: src/frontend/components/features/ActionPanel.tsx
-```typescript
-import React from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { isLoadingAtom, condenseSpecAtom, specContentAtom, outputAtom } from '../../state/atoms';
-
-export const ActionPanel: React.FC = () => {
-    const isLoading = useAtomValue(isLoadingAtom);
-    const specContent = useAtomValue(specContentAtom);
-    const output = useAtomValue(outputAtom);
-    const onCondense = useSetAtom(condenseSpecAtom);
-
-    return (
-        <button 
-            onClick={() => onCondense()}
-            disabled={isLoading || !specContent}
-            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
-        >
-            {isLoading ? (
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            ) : output ? 'Re-condense' : 'Condense'}
-        </button>
-    );
-}
 ```
 
 ## File: src/frontend/components/features/index.ts
@@ -636,28 +673,36 @@ export * from './Switch';
 export * from './TextInput';
 ```
 
-## File: src/frontend/components/ui/Switch.tsx
+## File: src/frontend/components/ui/TextInput.tsx
 ```typescript
-import React from 'react';
+import React, { useRef } from 'react';
 import { Tooltip } from './Tooltip';
+import { useInputFocus } from '../../state/motion.reuse';
 
-export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => (
-    <label className="flex items-center justify-between cursor-pointer">
-        <span className="text-sm text-slate-300 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </span>
-      <div className="relative">
-        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <div className={`block w-10 h-6 rounded-full transition-colors duration-200 ease-in-out ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
-        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
-      </div>
-    </label>
-));
+export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => {
+    const inputRef = useRef<HTMLDivElement>(null);
+    useInputFocus(inputRef);
+
+    return (
+        <div ref={inputRef}>
+            <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
+                {label}
+                {tooltip && (
+                    <Tooltip text={tooltip}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </Tooltip>
+                )}
+            </label>
+            <input
+                type="text"
+                placeholder={placeholder}
+                value={value?.join(', ')}
+                onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
+                className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition"
+            />
+        </div>
+    )
+});
 ```
 
 ## File: src/frontend/state/atoms.ts
@@ -824,6 +869,39 @@ import type { App } from '../backend/server';
 export const client = edenTreaty<App>('http://localhost:3000');
 ```
 
+## File: src/frontend/components/features/ActionPanel.tsx
+```typescript
+import React, { useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { isLoadingAtom, condenseSpecAtom, specContentAtom, outputAtom } from '../../state/atoms';
+import { useButtonHover } from '../../state/motion.reuse';
+
+export const ActionPanel: React.FC = () => {
+    const isLoading = useAtomValue(isLoadingAtom);
+    const specContent = useAtomValue(specContentAtom);
+    const output = useAtomValue(outputAtom);
+    const onCondense = useSetAtom(condenseSpecAtom);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    useButtonHover(buttonRef);
+
+    return (
+        <button 
+            ref={buttonRef}
+            onClick={() => onCondense()}
+            disabled={isLoading || !specContent}
+            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
+        >
+            {isLoading ? (
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            ) : output ? 'Re-condense' : 'Condense'}
+        </button>
+    );
+}
+```
+
 ## File: src/frontend/components/features/config/ConfigPanel.tsx
 ```typescript
 import React from 'react';
@@ -942,6 +1020,36 @@ export const ConfigPanel: React.FC = () => {
 };
 ```
 
+## File: src/frontend/components/ui/Switch.tsx
+```typescript
+import React, { useRef } from 'react';
+import { Tooltip } from './Tooltip';
+import { useSwitchAnimation } from '../../state/motion.reuse';
+
+export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    useSwitchAnimation(inputRef, checked);
+
+    return (
+        <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-slate-300 flex items-center gap-2">
+                {label}
+                {tooltip && (
+                    <Tooltip text={tooltip}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </Tooltip>
+                )}
+            </span>
+            <div className="relative">
+                <input ref={inputRef} type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+                <div className="block w-10 h-6 rounded-full bg-slate-600"></div>
+                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full"></div>
+            </div>
+        </label>
+    )
+});
+```
+
 ## File: tsconfig.json
 ```json
 {
@@ -978,6 +1086,7 @@ export const ConfigPanel: React.FC = () => {
 
 ## File: src/frontend/App.tsx
 ```typescript
+import { useRef } from 'react';
 import {
   ActionPanel,
   ConfigPanel,
@@ -985,32 +1094,56 @@ import {
   OutputPanel,
   StatsPanel,
 } from './components/features';
+import { usePanelEntrance } from './state/motion.reuse';
 
 export default function App() {
+  const configPanelRef = useRef<HTMLDivElement>(null);
+  const mainPanelsRef = useRef<HTMLDivElement>(null);
+
+  usePanelEntrance(configPanelRef);
+  usePanelEntrance(mainPanelsRef);
+
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
       <header className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-sm border-b border-slate-700/50 z-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">
-            <span className="text-cyan-400">OpenAPI</span> Condenser
-          </h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center">
+            <h1 className="text-xl font-bold text-white mr-4">
+              <span className="text-cyan-400">OpenAPI</span> Condenser
+            </h1>
+            <p className="text-sm text-slate-400 hidden sm:block">Pack your OpenAPI into AI-friendly formats</p>
+          </div>
+          <nav className="flex items-center gap-4">
+            <a href="/sdk" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              SDK
+            </a>
             <a href="/swagger" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
-              API Docs
+              API
             </a>
             <a href="https://github.com/repomix/openapi-condenser" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
               GitHub
             </a>
-          </div>
+            <a 
+              href="https://github.com/sponsors/repomix" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-pink-500 to-orange-500 text-white font-medium rounded-md hover:from-pink-600 hover:to-orange-600 transition-colors"
+            >
+              Sponsor
+            </a>
+          </nav>
         </div>
       </header>
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4 xl:col-span-3">
+          <div className="lg:col-span-4 xl:col-span-3" ref={configPanelRef}>
             <ConfigPanel />
           </div>
 
-          <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8">
+          <div
+            className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8"
+            ref={mainPanelsRef}
+          >
             <InputPanel />
             <ActionPanel />
             <StatsPanel />

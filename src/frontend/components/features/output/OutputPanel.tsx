@@ -1,23 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import CodeMirror from '@uiw/react-codemirror';
-import { json } from '@codemirror/lang-json';
-import { yaml } from '@codemirror/lang-yaml';
-import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
-import type { OutputFormat } from '../../../../backend/types';
+import type { OutputFormat } from '../../../../shared/types';
 import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
-
-interface OutputPanelProps {
-  // No props needed after Jotai integration
-}
-
-const languageMap: { [K in OutputFormat]: () => any } = {
-  json: () => json(),
-  yaml: () => yaml(),
-  xml: () => markdown({}), // fallback for xml
-  markdown: () => markdown({}),
-};
+import { languageMap } from '../../../constants';
 
 const SkeletonLoader = () => (
     <div className="absolute inset-0 p-4 space-y-3 animate-pulse">
@@ -31,7 +18,7 @@ const SkeletonLoader = () => (
 );
 
 
-export const OutputPanel: React.FC<OutputPanelProps> = () => {
+export const OutputPanel: React.FC<{}> = () => {
   const output = useAtomValue(outputAtom);
   const isLoading = useAtomValue(isLoadingAtom);
   const error = useAtomValue(errorAtom);
