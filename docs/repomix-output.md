@@ -1040,44 +1040,6 @@ body {
 }
 ```
 
-## File: src/shared/constants.ts
-```typescript
-import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
-
-// --- App Config ---
-export const API_PORT = 3000;
-export const API_HOST = 'localhost';
-export const API_PREFIX = '/api';
-export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
-
-// --- OpenAPI Semantics ---
-export const HTTP_METHODS: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
-export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
-
-// --- Default Extractor Config ---
-export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
-```
-
 ## File: test/e2e/transformer.test.ts
 ```typescript
 import { describe, it, expect } from 'bun:test';
@@ -1460,23 +1422,6 @@ describe('transformer.ts unit tests', () => {
 });
 ```
 
-## File: vite.config.ts
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      [API_PREFIX]: API_BASE_URL
-    }
-  }
-})
-```
-
 ## File: openapi-condenser.config.ts
 ```typescript
 import type { ExtractorConfig } from './src/backend/types';
@@ -1741,6 +1686,64 @@ export const languageMap: { [K in OutputFormat]: () => any } = {
 };
 ```
 
+## File: src/shared/constants.ts
+```typescript
+import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
+
+// --- App Config ---
+export const API_PORT = 3000;
+export const API_HOST = 'localhost';
+export const API_PREFIX = '/api';
+export const API_BASE_URL = ''; // Now relative for worker/proxy compatibility
+
+// --- OpenAPI Semantics ---
+export const HTTP_METHODS: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
+
+// --- Default Extractor Config ---
+export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
+  filter: {
+    paths: { include: [], exclude: [] },
+    tags: { include: [], exclude: [] },
+    methods: [],
+    includeDeprecated: false,
+  },
+  transform: {
+    removeExamples: false,
+    removeDescriptions: false,
+    removeSummaries: false,
+    includeServers: true,
+    includeInfo: true,
+    includeSchemas: true,
+    includeRequestBodies: true,
+    includeResponses: true,
+  },
+};
+```
+
+## File: vite.config.ts
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { API_PREFIX, API_HOST, API_PORT } from './src/shared/constants'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      [API_PREFIX]: {
+        target: `http://${API_HOST}:${API_PORT}`,
+        changeOrigin: true,
+      }
+    }
+  }
+})
+```
+
 ## File: src/backend/cli.ts
 ```typescript
 #!/usr/bin/env bun
@@ -1927,99 +1930,6 @@ export const getFormatter = (format: OutputFormat): Formatter => {
   }
   return formatter;
 };
-```
-
-## File: src/backend/utils/fetcher.ts
-```typescript
-import { promises as fs } from 'node:fs';
-import { extname } from 'node:path';
-import YAML from 'yaml';
-import type { OpenAPIExtractorResult, Source } from '../types';
-import { OpenAPI } from 'openapi-types';
-
-/**
- * Fetch OpenAPI spec from local file, remote URL, or in-memory content
- */
-export const fetchSpec = async (
-  source: Source
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    let content: string;
-    let contentType: string | null = null;
-    
-    if (source.type === 'memory') {
-      content = source.content;
-    } else if (source.type === 'local') {
-      content = await fs.readFile(source.path, 'utf-8');
-    } else {
-      const response = await fetch(source.path);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
-      }
-      content = await response.text();
-      contentType = response.headers.get('Content-Type');
-    }
-    
-    const data = parseContent(content, source.path, contentType);
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Parse content based on file extension or content type, with fallback.
- */
-export const parseContent = (
-  content: string,
-  source: string,
-  contentType?: string | null,
-): OpenAPI.Document => {
-  try {
-    // 1. Try parsing based on content type for remote files
-    if (contentType) {
-      if (contentType.includes('json')) {
-        return JSON.parse(content) as OpenAPI.Document;
-      }
-      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
-        return YAML.parse(content) as OpenAPI.Document;
-      }
-    }
-
-    // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
-    if (ext === '.json') {
-      return JSON.parse(content) as OpenAPI.Document;
-    }
-    if (ext === '.yaml' || ext === '.yml') {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-    
-    // 3. Fallback: try parsing as JSON, then YAML
-    try {
-      return JSON.parse(content) as OpenAPI.Document;
-    } catch (jsonError) {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
-    );
-  }
-};
-```
-
-## File: src/frontend/client.ts
-```typescript
-import { edenTreaty } from '@elysiajs/eden';
-import type { App } from '../backend/server';
-import { API_BASE_URL } from '../shared/constants';
-
-// Use with the specific older version
-export const client = edenTreaty<App>(API_BASE_URL);
 ```
 
 ## File: src/frontend/components/features/config/ConfigPanel.tsx
@@ -2215,6 +2125,109 @@ describe('extractor.ts unit tests', () => {
         });
     });
 });
+```
+
+## File: src/backend/utils/fetcher.ts
+```typescript
+import { promises as fs } from 'node:fs';
+import YAML from 'yaml';
+import type { OpenAPIExtractorResult, Source } from '../types';
+import { OpenAPI } from 'openapi-types';
+
+/**
+ * A simple worker-compatible replacement for path.extname
+ */
+const getExt = (path: string): string => {
+    const lastDotIndex = path.lastIndexOf('.');
+    if (lastDotIndex < 0) return '';
+    const lastSlashIndex = path.lastIndexOf('/');
+    if (lastSlashIndex > lastDotIndex) return '';
+    return path.substring(lastDotIndex);
+};
+
+/**
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ */
+export const fetchSpec = async (
+  source: Source
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    let content: string;
+    let contentType: string | null = null;
+    
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      content = await fs.readFile(source.path, 'utf-8');
+    } else {
+      const response = await fetch(source.path);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
+      }
+      content = await response.text();
+      contentType = response.headers.get('Content-Type');
+    }
+    
+    const data = parseContent(content, source.path, contentType);
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Parse content based on file extension or content type, with fallback.
+ */
+export const parseContent = (
+  content: string,
+  source: string,
+  contentType?: string | null,
+): OpenAPI.Document => {
+  try {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content) as OpenAPI.Document;
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content) as OpenAPI.Document;
+      }
+    }
+
+    // 2. Try parsing based on file extension
+    const ext = getExt(source).toLowerCase();
+    if (ext === '.json') {
+      return JSON.parse(content) as OpenAPI.Document;
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content) as OpenAPI.Document;
+    } catch (jsonError) {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
+    );
+  }
+};
+```
+
+## File: src/frontend/client.ts
+```typescript
+import { edenTreaty } from '@elysiajs/eden';
+import type { App } from '../backend/server';
+import { API_PREFIX } from '../shared/constants';
+
+// Use with the specific older version
+export const client = edenTreaty<App>(API_PREFIX);
 ```
 
 ## File: src/frontend/state/atoms.ts
@@ -3346,10 +3359,19 @@ import { swagger } from '@elysiajs/swagger';
 import { cors } from '@elysiajs/cors';
 import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
-import { resolve } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
+
+// --- Worker-compatible SSRF Protection Helpers ---
+
+// A forgiving regex-based IP checker, as `node:net` is unavailable.
+const isIP = (ip: string): number => {
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const ipv6Regex = /(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/;
+  if (ipv4Regex.test(ip)) return 4;
+  if (ipv6Regex.test(ip)) return 6;
+  return 0;
+};
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -3388,7 +3410,36 @@ const isPrivateIP = (ip: string) => {
   );
 };
 
-export const app = new Elysia()
+// Worker-compatible DNS resolver using DNS-over-HTTPS
+const resolveDns = async (hostname: string): Promise<string[]> => {
+    const urls = [
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=AAAA`,
+    ];
+
+    const responses = await Promise.all(urls.map(url => 
+        fetch(url, { headers: { 'Accept': 'application/dns-json' } })
+    ));
+
+    const ips: string[] = [];
+    for (const response of responses) {
+        if (response.ok) {
+            const dnsResponse = await response.json() as { Answer?: { data: string }[] };
+            if (dnsResponse.Answer) {
+                dnsResponse.Answer.forEach(ans => ips.push(ans.data));
+            }
+        }
+    }
+    
+    if (ips.length === 0) {
+        throw new Error(`Could not resolve hostname: ${hostname}`);
+    }
+
+    return ips;
+};
+
+
+export const app = new Elysia({ prefix: '/api' })
   .use(swagger())
   .use(cors({
     origin: /^http:\/\/localhost(:\d+)?$/,
@@ -3402,7 +3453,7 @@ export const app = new Elysia()
       return { error: error.message };
     }
   })
-  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+  .get('/fetch-spec', async ({ query: { url }, set }) => {
     if (!url) {
         set.status = 400;
         return { error: 'URL parameter is required' };
@@ -3428,12 +3479,7 @@ export const app = new Elysia()
       } else {
         // If it's a domain name, resolve it and check all returned IPs
         try {
-          let resolved = await resolve(hostname);
-          if (!Array.isArray(resolved)) {
-            resolved = [resolved];
-          }
-          const addresses = resolved.map((a: any) => (typeof a === 'string' ? a : a.address)).filter(Boolean);
-
+          const addresses = await resolveDns(hostname);
           if (addresses.some(isPrivateIP)) {
             set.status = 403;
             return { error: 'Fetching specs from private or local network addresses is forbidden.' };
@@ -3489,7 +3535,7 @@ export const app = new Elysia()
     }
   })
   .post(
-    '/api/condense',
+    '/condense',
     async ({ body, set }) => {
       const config: ExtractorConfig = {
         source: {
@@ -3616,10 +3662,15 @@ export const app = new Elysia()
 
 export type App = typeof app;
 
+// This part is for standalone server execution (e.g., local dev with `bun run`)
+// It will be ignored in a Cloudflare Worker environment.
 if (import.meta.main) {
   app.listen(API_PORT);
-  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+  console.log(`🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}/api`);
 }
+
+// Default export for serverless environments like Cloudflare Workers
+export default app;
 ```
 
 ## File: src/frontend/App.tsx
@@ -3708,6 +3759,7 @@ export default function App() {
     "dev": "concurrently \"vite\" \"bun run src/backend/server.ts\"",
     "start": "bun run src/backend/server.ts",
     "build": "vite build",
+    "deploy": "wrangler deploy src/backend/server.ts",
     "cli": "bun run src/backend/cli.ts",
     "test": "bun test"
   },
@@ -3719,7 +3771,8 @@ export default function App() {
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "4.5.2",
     "concurrently": "^9.1.2",
-    "vite": "5.4.19"
+    "vite": "5.4.19",
+    "wrangler": "^3.57.0"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -125,7 +125,7 @@ describe('E2E API Tests', () => {
         expect(data?.data).toBeString();
         expect(data?.data).toStartWith('# Sample API');
         expect(data?.data).toInclude('## Endpoints');
-        expect(data?.data).toInclude('### `GET` /users');
+        expect(data?.data).toInclude('### `GET` `/users`');
     });
 
     it('should filter paths based on include glob pattern', async () => {

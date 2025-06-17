@@ -332,7 +332,7 @@ export const transformOpenAPI = (
       delete transformed.servers;
     }
     if (transformOpts.includeInfo === false) {
-      delete transformed.info;
+      delete (transformed as Partial<OpenAPIV3.Document>).info;
     }
 
     if (transformed.paths) {
@@ -348,7 +348,7 @@ export const transformOpenAPI = (
                 delete operation.requestBody;
               }
               if (transformOpts.includeResponses === false) {
-                delete operation.responses;
+                delete (operation as Partial<OpenAPIV3.OperationObject>).responses;
               }
             }
           }
