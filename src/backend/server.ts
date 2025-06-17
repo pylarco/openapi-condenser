@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { swagger } from '@elysiajs/swagger';
-import { extractOpenAPI } from './backend/extractor';
-import type { ExtractorConfig, SpecStats } from './backend/types';
+import { extractOpenAPI } from './extractor';
+import type { ExtractorConfig, SpecStats } from './types';
 import { resolve } from 'node:dns/promises';
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.

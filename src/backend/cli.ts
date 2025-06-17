@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { parse } from 'cmd-ts';
 import { command, option, string, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './backend/extractor';
-import type { ExtractorConfig, OutputFormat } from './backend/types';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
+import type { ExtractorConfig, OutputFormat } from './types';
 
 const validFormats: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
 

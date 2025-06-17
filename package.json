@@ -6,10 +6,10 @@
     "openapi-condenser": "src/cli.ts"
   },
   "scripts": {
-    "dev": "concurrently \"vite\" \"bun run src/server.ts\"",
-    "start": "bun run src/server.ts",
+    "dev": "concurrently \"vite\" \"bun run src/backend/server.ts\"",
+    "start": "bun run src/backend/server.ts",
     "build": "vite build",
-    "cli": "bun run src/cli.ts"
+    "cli": "bun run src/backend/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
