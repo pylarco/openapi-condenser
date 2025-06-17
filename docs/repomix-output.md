@@ -79,6 +79,186 @@ vite.config.ts
 
 # Files
 
+## File: index.html
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenAPI Condenser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
+  </head>
+  <body class="bg-slate-900 text-slate-300">
+    <div id="root"></div>
+    <script type="module" src="/src/frontend/main.tsx"></script>
+  </body>
+</html>
+```
+
+## File: src/backend/cli.ts
+```typescript
+#!/usr/bin/env bun
+import { parse } from 'cmd-ts';
+import { command, option, string, optional, flag } from 'cmd-ts';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
+import type { ExtractorConfig, OutputFormat } from './types';
+
+const validFormats: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+
+// Define CLI command
+const cmd = command({
+  name: 'openapi-condenser',
+  description: 'Extract and transform OpenAPI specifications',
+  args: {
+    config: option({
+      type: optional(string),
+      long: 'config',
+      short: 'c',
+      description: 'Path to configuration file',
+    }),
+    source: option({
+      type: optional(string),
+      long: 'source',
+      short: 's',
+      description: 'Source file path or URL',
+    }),
+    sourceType: option({
+      type: optional(string),
+      long: 'source-type',
+      description: 'Source type (local or remote)',
+    }),
+    format: option({
+      type: optional(string),
+      long: 'format',
+      short: 'f',
+      description: `Output format (${validFormats.join(', ')})`,
+    }),
+    outputPath: option({
+      type: optional(string),
+      long: 'output',
+      short: 'o',
+      description: 'Output file path',
+    }),
+    includePaths: option({
+      type: optional(string),
+      long: 'include-paths',
+      description: 'Include paths by glob patterns (comma-separated)',
+    }),
+    excludePaths: option({
+      type: optional(string),
+      long: 'exclude-paths',
+      description: 'Exclude paths by glob patterns (comma-separated)',
+    }),
+    includeTags: option({
+      type: optional(string),
+      long: 'include-tags',
+      description: 'Include endpoints by tag glob patterns (comma-separated)',
+    }),
+    excludeTags: option({
+      type: optional(string),
+      long: 'exclude-tags',
+      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
+    }),
+    methods: option({
+      type: optional(string),
+      long: 'methods',
+      description: 'Filter by HTTP methods (comma-separated)',
+    }),
+    includeDeprecated: flag({
+      long: 'include-deprecated',
+      description: 'Include deprecated endpoints',
+    }),
+    verbose: flag({
+      long: 'verbose',
+      short: 'v',
+      description: 'Show verbose output',
+    }),
+  },
+  handler: async (args) => {
+    try {
+      // Load configuration
+      const configPath = args.config || './openapi-condenser.config.ts';
+      let config: ExtractorConfig;
+      
+      try {
+        config = await loadConfig(configPath);
+      } catch (error) {
+        if (args.source) {
+          const format = args.format || 'json';
+          if (!validFormats.includes(format as OutputFormat)) {
+            console.error(`Error: Invalid format '${format}'. Must be one of ${validFormats.join(', ')}.`);
+            process.exit(1);
+          }
+          // Create minimal config if no config file but source is provided
+          config = {
+            source: {
+              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
+              path: args.source
+            },
+            output: {
+              format: format as OutputFormat,
+            },
+          };
+        } else {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
+      }
+      
+      // Merge command line args with config
+      const mergedConfig = mergeWithCommandLineArgs(config, args);
+      
+      if (args.verbose) {
+        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
+      }
+      
+      // Run extraction
+      const result = await extractOpenAPI(mergedConfig);
+      
+      if (!result.success) {
+        if (result.errors) {
+          console.error('Errors:', result.errors.join('\n'));
+        }
+        process.exit(1);
+      }
+      
+      if (!mergedConfig.output.destination) {
+        // Output to stdout if no destination specified
+        console.log(result.data);
+      } else if (args.verbose) {
+        console.log(`Output written to: ${mergedConfig.output.destination}`);
+      }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        console.warn('Warnings:', result.warnings.join('\n'));
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  },
+});
+
+// Run the command
+await parse(cmd, process.argv.slice(2));
+```
+
 ## File: src/frontend/components/features/config/ConfigPanel.tsx
 ```typescript
 import React from 'react';
@@ -206,8 +386,8 @@ export * from './stats/StatsPanel';
 ```typescript
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useSetAtom, useAtom } from 'jotai';
-import { client } from '../client';
-import { specContentAtom, fileNameAtom } from '../state/atoms';
+import { client } from '../../../client';
+import { specContentAtom, fileNameAtom } from '../../../state/atoms';
 
 interface InputPanelProps {
   // No props needed after Jotai integration
@@ -417,14 +597,14 @@ import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
-import type { OutputFormat } from '../../backend/types';
-import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../state/atoms';
+import type { OutputFormat } from '../../../../backend/types';
+import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
 
 interface OutputPanelProps {
   // No props needed after Jotai integration
 }
 
-const languageMap: Record<OutputFormat, () => any> = {
+const languageMap: { [K in OutputFormat]: () => any } = {
   json: () => json(),
   yaml: () => yaml(),
   xml: () => markdown({}), // fallback for xml
@@ -725,259 +905,6 @@ export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({
 );
 ```
 
-## File: index.html
-```html
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenAPI Condenser</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
-          },
-        },
-      }
-    </script>
-  </head>
-  <body class="bg-slate-900 text-slate-300">
-    <div id="root"></div>
-    <script type="module" src="/src/frontend/main.tsx"></script>
-  </body>
-</html>
-```
-
-## File: src/backend/cli.ts
-```typescript
-#!/usr/bin/env bun
-import { parse } from 'cmd-ts';
-import { command, option, string, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig, OutputFormat } from './types';
-
-const validFormats: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
-
-// Define CLI command
-const cmd = command({
-  name: 'openapi-condenser',
-  description: 'Extract and transform OpenAPI specifications',
-  args: {
-    config: option({
-      type: optional(string),
-      long: 'config',
-      short: 'c',
-      description: 'Path to configuration file',
-    }),
-    source: option({
-      type: optional(string),
-      long: 'source',
-      short: 's',
-      description: 'Source file path or URL',
-    }),
-    sourceType: option({
-      type: optional(string),
-      long: 'source-type',
-      description: 'Source type (local or remote)',
-    }),
-    format: option({
-      type: optional(string),
-      long: 'format',
-      short: 'f',
-      description: `Output format (${validFormats.join(', ')})`,
-    }),
-    outputPath: option({
-      type: optional(string),
-      long: 'output',
-      short: 'o',
-      description: 'Output file path',
-    }),
-    includePaths: option({
-      type: optional(string),
-      long: 'include-paths',
-      description: 'Include paths by glob patterns (comma-separated)',
-    }),
-    excludePaths: option({
-      type: optional(string),
-      long: 'exclude-paths',
-      description: 'Exclude paths by glob patterns (comma-separated)',
-    }),
-    includeTags: option({
-      type: optional(string),
-      long: 'include-tags',
-      description: 'Include endpoints by tag glob patterns (comma-separated)',
-    }),
-    excludeTags: option({
-      type: optional(string),
-      long: 'exclude-tags',
-      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
-    }),
-    methods: option({
-      type: optional(string),
-      long: 'methods',
-      description: 'Filter by HTTP methods (comma-separated)',
-    }),
-    includeDeprecated: flag({
-      long: 'include-deprecated',
-      description: 'Include deprecated endpoints',
-    }),
-    verbose: flag({
-      long: 'verbose',
-      short: 'v',
-      description: 'Show verbose output',
-    }),
-  },
-  handler: async (args) => {
-    try {
-      // Load configuration
-      const configPath = args.config || './openapi-condenser.config.ts';
-      let config: ExtractorConfig;
-      
-      try {
-        config = await loadConfig(configPath);
-      } catch (error) {
-        if (args.source) {
-          const format = args.format || 'json';
-          if (!validFormats.includes(format as OutputFormat)) {
-            console.error(`Error: Invalid format '${format}'. Must be one of ${validFormats.join(', ')}.`);
-            process.exit(1);
-          }
-          // Create minimal config if no config file but source is provided
-          config = {
-            source: {
-              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
-              path: args.source
-            },
-            output: {
-              format: format as OutputFormat,
-            },
-          };
-        } else {
-          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
-        }
-      }
-      
-      // Merge command line args with config
-      const mergedConfig = mergeWithCommandLineArgs(config, args);
-      
-      if (args.verbose) {
-        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
-      }
-      
-      // Run extraction
-      const result = await extractOpenAPI(mergedConfig);
-      
-      if (!result.success) {
-        if (result.errors) {
-          console.error('Errors:', result.errors.join('\n'));
-        }
-        process.exit(1);
-      }
-      
-      if (!mergedConfig.output.destination) {
-        // Output to stdout if no destination specified
-        console.log(result.data);
-      } else if (args.verbose) {
-        console.log(`Output written to: ${mergedConfig.output.destination}`);
-      }
-      
-      if (result.warnings && result.warnings.length > 0) {
-        console.warn('Warnings:', result.warnings.join('\n'));
-      }
-    } catch (error) {
-      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
-    }
-  },
-});
-
-// Run the command
-await parse(cmd, process.argv.slice(2));
-```
-
-## File: src/backend/formatters/index.ts
-```typescript
-import { formatAsJson } from './json.ts';
-import { formatAsYaml } from './yaml.ts';
-import { formatAsXml } from './xml.ts';
-import { formatAsMarkdown } from './markdown.ts';
-import type { OutputFormat } from '../types.ts';
-import { OpenAPIV3 } from 'openapi-types';
-
-export interface Formatter {
-  format: (data: OpenAPIV3.Document) => string;
-}
-
-export const getFormatter = (format: OutputFormat): Formatter => {
-  switch (format) {
-    case 'json':
-      return { format: formatAsJson };
-    case 'yaml':
-      return { format: formatAsYaml };
-    case 'xml':
-      return { format: formatAsXml };
-    case 'markdown':
-      return { format: formatAsMarkdown };
-    default:
-      throw new Error(`Unsupported output format: ${format}`);
-  }
-};
-```
-
-## File: src/backend/formatters/json.ts
-```typescript
-import { OpenAPIV3 } from 'openapi-types';
-
-/**
- * Format data as JSON
- */
-export const formatAsJson = (data: OpenAPIV3.Document): string => {
-  return JSON.stringify(data, null, 2);
-};
-```
-
-## File: src/backend/formatters/xml.ts
-```typescript
-import { XMLBuilder } from 'fast-xml-parser';
-import { OpenAPIV3 } from 'openapi-types';
-
-/**
- * Format data as XML
- */
-export const formatAsXml = (data: OpenAPIV3.Document): string => {
-  const builder = new XMLBuilder({
-    format: true,
-    indentBy: '  ',
-    ignoreAttributes: false
-  });
-  
-  return builder.build({ openapi: data });
-};
-```
-
-## File: src/backend/formatters/yaml.ts
-```typescript
-import YAML from 'yaml';
-import { OpenAPIV3 } from 'openapi-types';
-
-/**
- * Format data as YAML
- */
-export const formatAsYaml = (data: OpenAPIV3.Document): string => {
-  return YAML.stringify(data);
-};
-```
-
 ## File: src/frontend/main.tsx
 ```typescript
 import React from 'react'
@@ -1225,108 +1152,6 @@ export const sampleSpec = {
   };
 ```
 
-## File: test/unit/transformer.test.ts
-```typescript
-import { describe, it, expect } from 'bun:test';
-import { getComponentNameFromRef, removeUnusedComponents, findRefsRecursive } from '../../src/backend/transformer';
-
-describe('transformer.ts unit tests', () => {
-    describe('getComponentNameFromRef', () => {
-        it('should correctly parse a standard component ref', () => {
-            const result = getComponentNameFromRef('#/components/schemas/MySchema');
-            expect(result).toEqual({ type: 'schemas', name: 'MySchema' });
-        });
-
-        it('should correctly parse a ref with a multi-part name', () => {
-            const result = getComponentNameFromRef('#/components/schemas/Common/ErrorResponse');
-            expect(result).toEqual({ type: 'schemas', name: 'Common/ErrorResponse' });
-        });
-
-        it('should return null for refs not pointing to components', () => {
-            const result = getComponentNameFromRef('#/paths/~1users/get');
-            expect(result).toBeNull();
-        });
-
-        it('should return null for malformed component refs', () => {
-            expect(getComponentNameFromRef('#/components/schemas/')).toBeNull();
-            expect(getComponentNameFromRef('#/components/')).toBeNull();
-            expect(getComponentNameFromRef('invalid-ref')).toBeNull();
-        });
-    });
-
-    describe('findRefsRecursive', () => {
-        it('should find all refs in a complex object', () => {
-            const obj = {
-                a: { $ref: '#/components/schemas/A' },
-                b: [{ $ref: '#/components/schemas/B' }],
-                c: { nested: { $ref: '#/components/schemas/C' } },
-                d: 'not a ref',
-                e: { $ref: 123 } // invalid ref type
-            };
-            const refs = new Set<string>();
-            findRefsRecursive(obj, refs);
-            expect(refs).toEqual(new Set(['#/components/schemas/A', '#/components/schemas/B', '#/components/schemas/C']));
-        });
-    });
-
-    describe('removeUnusedComponents', () => {
-        const baseSpec = () => ({
-            paths: {
-                '/users': {
-                    get: {
-                        responses: { '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
-                    }
-                }
-            },
-            components: {
-                schemas: {
-                    User: { type: 'object', properties: { profile: { $ref: '#/components/schemas/Profile' } } },
-                    Profile: { type: 'object', properties: { avatar: { $ref: '#/components/schemas/Avatar' } } },
-                    Avatar: { type: 'object' },
-                    UnusedSchema: { type: 'object' },
-                    OrphanedDependency: { $ref: '#/components/schemas/UnusedSchema' }
-                },
-                parameters: {
-                    UnusedParam: { name: 'limit', in: 'query' }
-                }
-            }
-        });
-        
-        it('should remove all unused components, including transitive ones', () => {
-            const spec = baseSpec();
-            const result = removeUnusedComponents(spec);
-
-            // Kept schemas
-            expect(result.components.schemas.User).toBeDefined();
-            expect(result.components.schemas.Profile).toBeDefined();
-            expect(result.components.schemas.Avatar).toBeDefined();
-
-            // Removed schemas
-            expect(result.components.schemas.UnusedSchema).toBeUndefined();
-            expect(result.components.schemas.OrphanedDependency).toBeUndefined();
-
-            // Removed component groups
-            expect(result.components.parameters).toBeUndefined();
-        });
-
-        it('should remove the entire components object if nothing is left', () => {
-            const spec = {
-                paths: { '/health': { get: { responses: { '200': { description: 'OK' } } } } },
-                components: { schemas: { Unused: { type: 'object' } } }
-            };
-            const result = removeUnusedComponents(spec);
-            expect(result.components).toBeUndefined();
-        });
-
-        it('should not modify a spec with no components object', () => {
-            const spec = { paths: {} };
-            const result = removeUnusedComponents(JSON.parse(JSON.stringify(spec)));
-            expect(result).toEqual(spec);
-        });
-    });
-});
-```
-
 ## File: vite.config.ts
 ```typescript
 import { defineConfig } from 'vite'
@@ -1341,6 +1166,79 @@ export default defineConfig({
     }
   }
 })
+```
+
+## File: src/backend/formatters/index.ts
+```typescript
+import { formatAsJson } from './json.ts';
+import { formatAsYaml } from './yaml.ts';
+import { formatAsXml } from './xml.ts';
+import { formatAsMarkdown } from './markdown.ts';
+import type { OutputFormat } from '../types.ts';
+import { OpenAPIV3 } from 'openapi-types';
+
+export interface Formatter {
+  format: (data: OpenAPIV3.Document) => string;
+}
+
+export const getFormatter = (format: OutputFormat): Formatter => {
+  switch (format) {
+    case 'json':
+      return { format: formatAsJson };
+    case 'yaml':
+      return { format: formatAsYaml };
+    case 'xml':
+      return { format: formatAsXml };
+    case 'markdown':
+      return { format: formatAsMarkdown };
+    default:
+      throw new Error(`Unsupported output format: ${format}`);
+  }
+};
+```
+
+## File: src/backend/formatters/json.ts
+```typescript
+import { OpenAPIV3 } from 'openapi-types';
+
+/**
+ * Format data as JSON
+ */
+export const formatAsJson = (data: OpenAPIV3.Document): string => {
+  return JSON.stringify(data, null, 2);
+};
+```
+
+## File: src/backend/formatters/xml.ts
+```typescript
+import { XMLBuilder } from 'fast-xml-parser';
+import { OpenAPIV3 } from 'openapi-types';
+
+/**
+ * Format data as XML
+ */
+export const formatAsXml = (data: OpenAPIV3.Document): string => {
+  const builder = new XMLBuilder({
+    format: true,
+    indentBy: '  ',
+    ignoreAttributes: false
+  });
+  
+  return builder.build({ openapi: data });
+};
+```
+
+## File: src/backend/formatters/yaml.ts
+```typescript
+import YAML from 'yaml';
+import { OpenAPIV3 } from 'openapi-types';
+
+/**
+ * Format data as YAML
+ */
+export const formatAsYaml = (data: OpenAPIV3.Document): string => {
+  return YAML.stringify(data);
+};
 ```
 
 ## File: src/backend/index.ts
@@ -1656,70 +1554,112 @@ describe('Complex Transformer and Stats Validation', () => {
 });
 ```
 
-## File: test/unit/extractor.test.ts
+## File: test/unit/transformer.test.ts
 ```typescript
 import { describe, it, expect } from 'bun:test';
-import { calculateStats } from '../../src/backend/extractor';
+import { getComponentNameFromRef, removeUnusedComponents, findRefsRecursive } from '../../src/backend/transformer';
+import { OpenAPIV3 } from 'openapi-types';
 
-describe('extractor.ts unit tests', () => {
-    describe('calculateStats', () => {
-        it('should return zero for an empty or invalid spec', () => {
-            expect(calculateStats(null)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
-            const emptyStats = calculateStats({});
-            expect(emptyStats.paths).toBe(0);
-            expect(emptyStats.operations).toBe(0);
-            expect(emptyStats.schemas).toBe(0);
-            expect(emptyStats.charCount).toBe(2); // {}
+describe('transformer.ts unit tests', () => {
+    describe('getComponentNameFromRef', () => {
+        it('should correctly parse a standard component ref', () => {
+            const result = getComponentNameFromRef('#/components/schemas/MySchema');
+            expect(result).toEqual({ type: 'schemas', name: 'MySchema' });
         });
 
-        it('should correctly count paths, operations, and schemas', () => {
-            const spec = {
-                paths: {
-                    '/users': {
-                        get: { summary: 'Get users' },
-                        post: { summary: 'Create user' }
-                    },
-                    '/users/{id}': {
-                        get: { summary: 'Get user by id' },
-                        put: { summary: 'Update user' },
-                        delete: { summary: 'Delete user' },
-                        // This should not be counted as an operation
-                        parameters: [{ name: 'id', in: 'path' }]
-                    },
-                    '/health': {
-                        get: { summary: 'Health check' }
-                    }
-                },
-                components: {
-                    schemas: {
-                        User: { type: 'object' },
-                        Error: { type: 'object' }
+        it('should correctly parse a ref with a multi-part name', () => {
+            const result = getComponentNameFromRef('#/components/schemas/Common/ErrorResponse');
+            expect(result).toEqual({ type: 'schemas', name: 'Common/ErrorResponse' });
+        });
+
+        it('should return null for refs not pointing to components', () => {
+            const result = getComponentNameFromRef('#/paths/~1users/get');
+            expect(result).toBeNull();
+        });
+
+        it('should return null for malformed component refs', () => {
+            expect(getComponentNameFromRef('#/components/schemas/')).toBeNull();
+            expect(getComponentNameFromRef('#/components/')).toBeNull();
+            expect(getComponentNameFromRef('invalid-ref')).toBeNull();
+        });
+    });
+
+    describe('findRefsRecursive', () => {
+        it('should find all refs in a complex object', () => {
+            const obj = {
+                a: { $ref: '#/components/schemas/A' },
+                b: [{ $ref: '#/components/schemas/B' }],
+                c: { nested: { $ref: '#/components/schemas/C' } },
+                d: 'not a ref',
+                e: { $ref: 123 } // invalid ref type
+            };
+            const refs = new Set<string>();
+            findRefsRecursive(obj, refs);
+            expect(refs).toEqual(new Set(['#/components/schemas/A', '#/components/schemas/B', '#/components/schemas/C']));
+        });
+    });
+
+    describe('removeUnusedComponents', () => {
+        const baseSpec = (): OpenAPIV3.Document => ({
+            openapi: '3.0.0',
+            info: { title: 'Test Spec', version: '1.0.0' },
+            paths: {
+                '/users': {
+                    get: {
+                        responses: { '200': { description: 'ok', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
                     }
                 }
-            };
-            const stats = calculateStats(spec);
-            expect(stats.paths).toBe(3);
-            expect(stats.operations).toBe(6);
-            expect(stats.schemas).toBe(2);
-            expect(stats.charCount).toBeGreaterThan(100);
-            expect(stats.lineCount).toBeGreaterThan(10);
-            expect(stats.tokenCount).toBeGreaterThan(25);
+            },
+            components: {
+                schemas: {
+                    User: { type: 'object', properties: { profile: { $ref: '#/components/schemas/Profile' } } },
+                    Profile: { type: 'object', properties: { avatar: { $ref: '#/components/schemas/Avatar' } } },
+                    Avatar: { type: 'object' },
+                    UnusedSchema: { type: 'object' },
+                    OrphanedDependency: { $ref: '#/components/schemas/UnusedSchema' }
+                },
+                parameters: {
+                    UnusedParam: { name: 'limit', in: 'query' }
+                }
+            }
+        });
+        
+        it('should remove all unused components, including transitive ones', () => {
+            const spec = baseSpec();
+            const result = removeUnusedComponents(spec);
+
+            // Kept schemas
+            expect(result.components?.schemas?.User).toBeDefined();
+            expect(result.components?.schemas?.Profile).toBeDefined();
+            expect(result.components?.schemas?.Avatar).toBeDefined();
+
+            // Removed schemas
+            expect(result.components?.schemas?.UnusedSchema).toBeUndefined();
+            expect(result.components?.schemas?.OrphanedDependency).toBeUndefined();
+
+            // Removed component groups
+            expect(result.components?.parameters).toBeUndefined();
         });
 
-        it('should handle paths with no valid methods', () => {
-            const spec = {
-                paths: {
-                    '/users': {
-                        'x-custom-property': 'value',
-                        parameters: []
-                    }
-                },
-                components: {}
+        it('should remove the entire components object if nothing is left', () => {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
+                paths: { '/health': { get: { responses: { '200': { description: 'OK' } } } } },
+                components: { schemas: { Unused: { type: 'object' } } }
             };
-            const stats = calculateStats(spec);
-            expect(stats.paths).toBe(1);
-            expect(stats.operations).toBe(0);
-            expect(stats.schemas).toBe(0);
+            const result = removeUnusedComponents(spec);
+            expect(result.components).toBeUndefined();
+        });
+
+        it('should not modify a spec with no components object', () => {
+            const spec: OpenAPIV3.Document = { 
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
+                paths: {} 
+            };
+            const result = removeUnusedComponents(JSON.parse(JSON.stringify(spec)));
+            expect(result).toEqual(spec);
         });
     });
 });
@@ -1764,6 +1704,85 @@ const config: ExtractorConfig = {
 };
 
 export default config;
+```
+
+## File: src/frontend/client.ts
+```typescript
+import { edenTreaty } from '@elysiajs/eden';
+import type { App } from '../backend/server';
+
+// Use with the specific older version
+export const client = edenTreaty<App>('http://localhost:3000');
+```
+
+## File: test/unit/extractor.test.ts
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { calculateSpecStats } from '../../src/backend/extractor';
+import { OpenAPIV3 } from 'openapi-types';
+
+describe('extractor.ts unit tests', () => {
+    describe('calculateSpecStats', () => {
+        it('should return zero for an empty or invalid spec', () => {
+            expect(calculateSpecStats(null as any)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
+            const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
+            expect(emptyStats.paths).toBe(0);
+            expect(emptyStats.operations).toBe(0);
+            expect(emptyStats.schemas).toBe(0);
+            expect(emptyStats.charCount).toBe(2); // {}
+        });
+
+        it('should correctly count paths, operations, and schemas', () => {
+            const spec: Partial<OpenAPIV3.Document> = {
+                paths: {
+                    '/users': {
+                        get: { summary: 'Get users' },
+                        post: { summary: 'Create user' }
+                    },
+                    '/users/{id}': {
+                        get: { summary: 'Get user by id' },
+                        put: { summary: 'Update user' },
+                        delete: { summary: 'Delete user' },
+                        // This should not be counted as an operation
+                        parameters: [{ name: 'id', in: 'path' }]
+                    },
+                    '/health': {
+                        get: { summary: 'Health check' }
+                    }
+                },
+                components: {
+                    schemas: {
+                        User: { type: 'object' },
+                        Error: { type: 'object' }
+                    }
+                }
+            };
+            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
+            expect(stats.paths).toBe(3);
+            expect(stats.operations).toBe(6);
+            expect(stats.schemas).toBe(2);
+            expect(stats.charCount).toBeGreaterThan(100);
+            expect(stats.lineCount).toBeGreaterThan(10);
+            expect(stats.tokenCount).toBeGreaterThan(25);
+        });
+
+        it('should handle paths with no valid methods', () => {
+            const spec: Partial<OpenAPIV3.Document> = {
+                paths: {
+                    '/users': {
+                        'x-custom-property': 'value',
+                        parameters: []
+                    }
+                },
+                components: {}
+            };
+            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
+            expect(stats.paths).toBe(1);
+            expect(stats.operations).toBe(0);
+            expect(stats.schemas).toBe(0);
+        });
+    });
+});
 ```
 
 ## File: src/backend/formatters/markdown.ts
@@ -1917,7 +1936,7 @@ export const formatAsMarkdown = (data: OpenAPIV3.Document): string => {
     markdown += `## Schemas\n\n`;
     Object.entries(data.components.schemas).forEach(([name, schema]: [string, OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject]) => {
       markdown += `### ${name}\n\n`;
-      const resolvedSchema = resolveRef(schema);
+      const resolvedSchema = resolveRef<OpenAPIV3.SchemaObject>(schema);
       if (resolvedSchema.description) {
         markdown += `${resolvedSchema.description}\n\n`;
       }
@@ -1966,8 +1985,7 @@ const formatSchema = (
         return (current || refObj) as T;
     };
     
-    const currentSchema =
-      '$ref' in schema ? resolveRef<OpenAPIV3.SchemaObject>(schema) : schema;
+    const currentSchema = resolveRef<OpenAPIV3.SchemaObject>(schema);
     
     if ('$ref' in schema) {
         const refName = schema.$ref.split('/').pop();
@@ -1982,30 +2000,28 @@ const formatSchema = (
             const required = currentSchema.required?.includes(propName) ? ' (required)' : '';
             const type = formatSchemaType(propSchema);
             markdown += `${indentStr}- \`${propName}\`${required}: \`${type}\``;
-            const resolvedProp = resolveRef(propSchema);
-            const resolvedPropSchema =
-              '$ref' in propSchema ? resolveRef(propSchema) : propSchema;
+            
+            const resolvedPropSchema = resolveRef<OpenAPIV3.SchemaObject>(propSchema);
 
-            if ('description' in resolvedPropSchema && resolvedPropSchema.description) {
+            if (resolvedPropSchema.description) {
                 markdown += ` - ${resolvedPropSchema.description}`;
             }
             markdown += '\n';
+
+            const isNestedObject = (items: OpenAPIV3.ReferenceObject | OpenAPIV3.SchemaObject): boolean => {
+              const resolvedItems = resolveRef<OpenAPIV3.SchemaObject>(items);
+              return resolvedItems.type === 'object';
+            };
 
             if (
                 resolvedPropSchema.type === 'object' ||
                 (resolvedPropSchema.type === 'array' &&
                   resolvedPropSchema.items &&
-                  ((('$ref' in resolvedPropSchema.items &&
-                    resolveRef(resolvedPropSchema.items).type === 'object') as boolean) ||
-                    ((!('$ref' in resolvedPropSchema.items) &&
-                      (resolvedPropSchema.items as OpenAPIV3.SchemaObject).type ===
-                        'object') as boolean)))
+                  isNestedObject(resolvedPropSchema.items))
             ) {
                 markdown += formatSchema(
                     resolvedPropSchema.type === 'array'
-                      ? (resolvedPropSchema.items as
-                          | OpenAPIV3.SchemaObject
-                          | OpenAPIV3.ReferenceObject)
+                      ? resolvedPropSchema.items
                       : resolvedPropSchema,
                     data,
                     indent + 1
@@ -2016,7 +2032,7 @@ const formatSchema = (
         markdown += `${indentStr}**Array of:** \`${formatSchemaType(
           currentSchema.items,
         )}\`\n`;
-        const resolvedItems = resolveRef(currentSchema.items);
+        const resolvedItems = resolveRef<OpenAPIV3.SchemaObject>(currentSchema.items);
         if (resolvedItems.type === 'object') {
             markdown += formatSchema(currentSchema.items, data, indent + 1);
         }
@@ -2108,15 +2124,6 @@ export const parseContent = (
     );
   }
 };
-```
-
-## File: src/frontend/client.ts
-```typescript
-import { edenTreaty } from '@elysiajs/eden';
-import type { App } from '../backend/server';
-
-// Use with the specific older version
-export const client = edenTreaty<App>('http://localhost:3000');
 ```
 
 ## File: src/backend/extractor.ts
@@ -2362,7 +2369,6 @@ describe('E2E API Tests', () => {
   describe('/api/fetch-spec', () => {
     it('should fetch a valid remote OpenAPI spec', async () => {
       const { data, error, status } = await api['api']['fetch-spec'].get({
-        // @ts-ignore
         query: { url: publicSpecUrl },
       });
 
@@ -2470,13 +2476,17 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+        
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).toEqual(['/users']);
         expect(result.paths['/users/{userId}']).toBeUndefined();
         // Check stats
-        expect(data?.stats.before.paths).toBe(4);
-        expect(data?.stats.after.paths).toBe(1);
-        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(1);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
     });
     
     it('should filter paths based on exclude glob pattern', async () => {
@@ -2488,13 +2498,17 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).not.toInclude('/internal/status');
         expect(Object.keys(result.paths)).toHaveLength(3);
         // Check stats
-        expect(data?.stats.before.paths).toBe(4);
-        expect(data?.stats.after.paths).toBe(3);
-        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(3);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
     });
 
     it('should filter by tags', async () => {
@@ -2506,9 +2520,12 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).toEqual(['/users', '/users/{userId}']);
-        expect(data?.stats.after.operations).toBe(2);
+        expect(data.stats?.after.operations).toBe(2);
     });
 
     it('should exclude deprecated endpoints by default', async () => {
@@ -2517,7 +2534,10 @@ describe('E2E API Tests', () => {
             output: { format: 'json' },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+        
+        const result = JSON.parse(data.data);
         expect(result.paths['/internal/status']).toBeUndefined();
     });
 
@@ -2530,7 +2550,10 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(result.paths['/internal/status']).toBeDefined();
     });
 
@@ -2543,13 +2566,17 @@ describe('E2E API Tests', () => {
             },
         });
 
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
         // Only '/items' path should remain
         expect(Object.keys(result.paths)).toEqual(['/items']);
         // Only 'Item' schema should remain, 'User' and 'UnusedSchema' should be gone
         expect(Object.keys(result.components.schemas)).toEqual(['Item']);
-        expect(data?.stats.before.schemas).toBe(3);
-        expect(data?.stats.after.schemas).toBe(1);
+        expect(data.stats.before.schemas).toBe(3);
+        expect(data.stats.after.schemas).toBe(1);
     });
 
     it('should apply transformations like removing descriptions', async () => {
@@ -2561,7 +2588,10 @@ describe('E2E API Tests', () => {
             },
         });
 
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(result.info.description).toBeUndefined();
         expect(result.paths['/users'].get.description).toBeUndefined();
         expect(result.components.schemas.User.properties.id.description).toBeUndefined();
@@ -2578,7 +2608,7 @@ describe('E2E API Tests', () => {
 
         expect(status).toBe(400);
 
-        if (error?.value && 'success' in error.value && 'errors' in error.value) {
+        if (error?.value && 'success' in error.value && 'errors' in error.value && Array.isArray(error.value.errors)) {
             expect(error.value.success).toBe(false);
             expect(error.value.errors).toContain('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
         } else {
@@ -2630,9 +2660,10 @@ import {
   type TransformOptions,
   type SchemaTransformer,
   type FilterPatterns,
+  type HttpMethod,
 } from './types';
 import micromatch from 'micromatch';
-import { type OpenAPI, OpenAPIV3 } from 'openapi-types';
+import { OpenAPIV3 } from 'openapi-types';
 
 /**
  * Checks if an endpoint's tags match the provided patterns.
@@ -2680,7 +2711,15 @@ export const filterPaths = (
       const filteredMethods = filterMethods(pathItem, filterOptions);
 
       if (Object.keys(filteredMethods).length > 0) {
-        acc[path] = { ...pathItem, ...filteredMethods };
+        // Re-add non-method properties from the original pathItem
+        const newPathItem: OpenAPIV3.PathItemObject = { ...filteredMethods };
+        if (pathItem.summary) newPathItem.summary = pathItem.summary;
+        if (pathItem.description) newPathItem.description = pathItem.description;
+        if (pathItem.parameters) newPathItem.parameters = pathItem.parameters;
+        if (pathItem.servers) newPathItem.servers = pathItem.servers;
+        if (pathItem.$ref) newPathItem.$ref = pathItem.$ref;
+        
+        acc[path] = newPathItem;
       }
     }
 
@@ -2688,54 +2727,51 @@ export const filterPaths = (
   }, {} as OpenAPIV3.PathsObject);
 };
 
-function isHttpMethod(method: string): method is OpenAPIV3.HttpMethods {
-  return [
-    'get',
-    'put',
-    'post',
-    'delete',
-    'options',
-    'head',
-    'patch',
-    'trace',
-  ].includes(method);
+const httpMethods: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+
+function isHttpMethod(method: string): method is HttpMethod {
+  return httpMethods.includes(method as HttpMethod);
 }
 
 /**
  * Filter HTTP methods based on configuration
  */
 export const filterMethods = (
-  methods: OpenAPIV3.PathItemObject,
+  pathItem: OpenAPIV3.PathItemObject,
   filterOptions: FilterOptions,
 ): OpenAPIV3.PathItemObject => {
   const newPathItem: OpenAPIV3.PathItemObject = {};
-  for (const [method, definition] of Object.entries(methods)) {
-    if (!isHttpMethod(method)) {
-      continue;
+  
+  for (const key in pathItem) {
+    if (isHttpMethod(key)) {
+      const method: HttpMethod = key;
+      const operation = pathItem[method];
+
+      if (!operation) continue;
+
+      if (
+        filterOptions.methods &&
+        filterOptions.methods.length > 0 &&
+        !filterOptions.methods.includes(method)
+      ) {
+        continue;
+      }
+
+      if (!filterOptions.includeDeprecated && operation.deprecated) {
+        continue;
+      }
+
+      if (
+        filterOptions.tags &&
+        !matchesTags(operation.tags, filterOptions.tags)
+      ) {
+        continue;
+      }
+
+      newPathItem[method] = operation;
     }
-
-    if (
-      filterOptions.methods &&
-      filterOptions.methods.length > 0 &&
-      !filterOptions.methods.includes(method)
-    ) {
-      continue;
-    }
-
-    const operation = definition as OpenAPIV3.OperationObject;
-
-    if (!filterOptions.includeDeprecated && operation.deprecated) {
-      continue;
-    }
-
-    if (
-      filterOptions.tags &&
-      !matchesTags(operation.tags, filterOptions.tags)
-    ) {
-      continue;
-    }
-
-    newPathItem[method] = definition;
   }
   return newPathItem;
 };
@@ -2872,16 +2908,16 @@ export const removeUnusedComponents = (
  * Transform OpenAPI schema based on configuration
  */
 export const transformSchema = (
-  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject,
+  node: any,
   transformOptions: TransformOptions,
   currentDepth = 0,
-): OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | null => {
-  if (!schema || typeof schema !== 'object') {
-    return schema;
+): any => {
+  if (!node || typeof node !== 'object') {
+    return node;
   }
   
-  if ('$ref' in schema) {
-    return schema;
+  if ('$ref' in node) {
+    return node;
   }
   
   // Handle maximum depth
@@ -2894,13 +2930,13 @@ export const transformSchema = (
     };
   }
   
-  if (Array.isArray(schema)) {
-    return schema
+  if (Array.isArray(node)) {
+    return node
       .map(item => transformSchema(item, transformOptions, currentDepth + 1))
-      .filter(Boolean) as (OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject)[];
+      .filter(Boolean);
   }
 
-  const result: OpenAPIV3.SchemaObject = { ...schema };
+  const result: { [key: string]: any } = { ...node };
   
   // Remove examples if configured
   if (transformOptions.removeExamples && 'example' in result) {
@@ -2922,9 +2958,9 @@ export const transformSchema = (
   
   // Recursively transform nested properties
   for (const key in result) {
-    const prop = (result as any)[key];
+    const prop = result[key];
     if (typeof prop === 'object' && prop !== null) {
-      (result as any)[key] = transformSchema(
+      result[key] = transformSchema(
         prop,
         transformOptions,
         currentDepth + 1,
@@ -2953,7 +2989,7 @@ export const transformOpenAPI = (
   // Apply transformations on the entire document
   if (transformOpts) {
     transformed = transformSchema(
-      transformed as any,
+      transformed,
       transformOpts,
     ) as OpenAPIV3.Document;
   }
@@ -2981,6 +3017,7 @@ export const composeTransformers =
 import type { OpenAPI, OpenAPIV3 } from 'openapi-types';
 
 export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'trace';
 
 export type FilterPatterns = {
   include?: string[];
@@ -2991,7 +3028,7 @@ export type FilterOptions = {
   paths?: FilterPatterns;
   tags?: FilterPatterns;
   operationIds?: FilterPatterns;
-  methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
+  methods?: HttpMethod[];
   includeDeprecated?: boolean;
 };
 

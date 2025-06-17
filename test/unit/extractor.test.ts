@@ -5,7 +5,8 @@ import { OpenAPIV3 } from 'openapi-types';
 describe('extractor.ts unit tests', () => {
     describe('calculateSpecStats', () => {
         it('should return zero for an empty or invalid spec', () => {
-            expect(calculateSpecStats(null as any)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
+            const spec = null;
+            expect(calculateSpecStats(spec as unknown as OpenAPIV3.Document)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
             const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
             expect(emptyStats.paths).toBe(0);
             expect(emptyStats.operations).toBe(0);
@@ -14,21 +15,23 @@ describe('extractor.ts unit tests', () => {
         });
 
         it('should correctly count paths, operations, and schemas', () => {
-            const spec: Partial<OpenAPIV3.Document> = {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
                 paths: {
                     '/users': {
-                        get: { summary: 'Get users' },
-                        post: { summary: 'Create user' }
+                        get: { summary: 'Get users', responses: { '200': { description: 'OK' } } },
+                        post: { summary: 'Create user', responses: { '200': { description: 'OK' } } }
                     },
                     '/users/{id}': {
-                        get: { summary: 'Get user by id' },
-                        put: { summary: 'Update user' },
-                        delete: { summary: 'Delete user' },
+                        get: { summary: 'Get user by id', responses: { '200': { description: 'OK' } } },
+                        put: { summary: 'Update user', responses: { '200': { description: 'OK' } } },
+                        delete: { summary: 'Delete user', responses: { '200': { description: 'OK' } } },
                         // This should not be counted as an operation
-                        parameters: [{ name: 'id', in: 'path' }]
+                        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
                     },
                     '/health': {
-                        get: { summary: 'Health check' }
+                        get: { summary: 'Health check', responses: { '200': { description: 'OK' } } }
                     }
                 },
                 components: {
@@ -38,7 +41,7 @@ describe('extractor.ts unit tests', () => {
                     }
                 }
             };
-            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
+            const stats = calculateSpecStats(spec);
             expect(stats.paths).toBe(3);
             expect(stats.operations).toBe(6);
             expect(stats.schemas).toBe(2);
@@ -48,16 +51,20 @@ describe('extractor.ts unit tests', () => {
         });
 
         it('should handle paths with no valid methods', () => {
-            const spec: Partial<OpenAPIV3.Document> = {
+            const usersPath: OpenAPIV3.PathItemObject = {
+                parameters: [],
+            };
+            Object.assign(usersPath, { 'x-custom-property': 'value' });
+
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
                 paths: {
-                    '/users': {
-                        'x-custom-property': 'value',
-                        parameters: []
-                    }
+                    '/users': usersPath
                 },
                 components: {}
             };
-            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
+            const stats = calculateSpecStats(spec);
             expect(stats.paths).toBe(1);
             expect(stats.operations).toBe(0);
             expect(stats.schemas).toBe(0);

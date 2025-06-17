@@ -112,7 +112,7 @@ export const app = new Elysia()
       return { content };
 
     } catch (e) {
-      if (e instanceof TypeError && e.message.includes('Invalid URL')) {
+      if (e instanceof TypeError) {
         set.status = 400;
         return { error: `Invalid URL provided: ${url}` };
       }
@@ -125,6 +125,7 @@ export const app = new Elysia()
   }, {
     query: t.Object({
       url: t.Optional(t.String({
+        format: 'uri-reference',
         description: 'A public URL to an OpenAPI specification file.',
         error: 'Invalid URL format provided.'
       }))
@@ -228,6 +229,7 @@ export const app = new Elysia()
                 t.Literal('patch'),
                 t.Literal('options'),
                 t.Literal('head'),
+                t.Literal('trace'),
             ]))),
             includeDeprecated: t.Optional(t.Boolean()),
           })
