@@ -17,6 +17,7 @@ export type TransformOptions = {
   maxDepth?: number;
   removeExamples?: boolean;
   removeDescriptions?: boolean;
+  removeSummaries?: boolean;
   includeServers?: boolean;
   includeInfo?: boolean;
 };

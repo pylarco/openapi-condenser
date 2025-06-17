@@ -243,6 +243,11 @@ export const transformSchema = (
   if (transformOptions.removeDescriptions && 'description' in result) {
     delete result.description;
   }
+
+  // Remove summaries if configured
+  if (transformOptions.removeSummaries && 'summary' in result) {
+    delete result.summary;
+  }
   
   // Process all properties recursively
   Object.keys(result).forEach(key => {

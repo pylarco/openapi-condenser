@@ -16,6 +16,7 @@ const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
   transform: {
     removeExamples: false,
     removeDescriptions: false,
+    removeSummaries: false,
     includeServers: true,
     includeInfo: true,
   },

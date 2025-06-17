@@ -18,11 +18,9 @@ export const formatAsMarkdown = (data: any): string => {
   // Add API information
   if (data.info) {
     markdown += `# ${data.info.title || 'API Documentation'}\n\n`;
-    
     if (data.info.version) {
       markdown += `**Version:** ${data.info.version}\n\n`;
     }
-    
     if (data.info.description) {
       markdown += `${data.info.description}\n\n`;
     }
@@ -31,11 +29,9 @@ export const formatAsMarkdown = (data: any): string => {
   // Add server information
   if (data.servers && data.servers.length > 0) {
     markdown += `## Servers\n\n`;
-    
     data.servers.forEach((server: any) => {
       markdown += `- ${server.url}${server.description ? ` - ${server.description}` : ''}\n`;
     });
-    
     markdown += '\n';
   }
   
@@ -44,13 +40,11 @@ export const formatAsMarkdown = (data: any): string => {
     markdown += `## Endpoints\n\n`;
     
     Object.entries(data.paths).forEach(([path, methods]: [string, any]) => {
-      markdown += `### ${path}\n\n`;
-      
       Object.entries(methods).forEach(([method, operation]: [string, any]) => {
-        markdown += `#### ${method.toUpperCase()}\n\n`;
+        markdown += `### \`${method.toUpperCase()}\` ${path}\n\n`;
         
         if (operation.summary) {
-          markdown += `**Summary:** ${operation.summary}\n\n`;
+          markdown += `> ${operation.summary}\n\n`;
         }
         
         if (operation.description) {
@@ -59,23 +53,20 @@ export const formatAsMarkdown = (data: any): string => {
         
         // Parameters
         if (operation.parameters && operation.parameters.length > 0) {
-          markdown += `##### Parameters\n\n`;
-          markdown += `| Name | In | Required | Type | Description |\n`;
-          markdown += `| ---- | -- | -------- | ---- | ----------- |\n`;
-          
+          markdown += `**Parameters:**\n`;
           operation.parameters.forEach((paramRef: any) => {
             const param = resolveRef(paramRef);
-            const type = param.schema ? formatSchemaType(param.schema) : '';
-            markdown += `| ${param.name || ''} | ${param.in || ''} | ${param.required ? 'Yes' : 'No'} | ${type} | ${param.description || ''} |\n`;
+            const type = param.schema ? formatSchemaType(param.schema) : 'any';
+            const required = param.required ? ' (required)' : '';
+            markdown += `- \`${param.name}\` (${param.in})${required}: \`${type}\`${param.description ? ` - ${param.description}` : ''}\n`;
           });
-          
           markdown += '\n';
         }
         
         // Request body
         if (operation.requestBody) {
           const requestBody = resolveRef(operation.requestBody);
-          markdown += `##### Request Body\n\n`;
+          markdown += `**Request Body:**\n\n`;
           
           if (requestBody.description) {
             markdown += `${requestBody.description}\n\n`;
@@ -83,36 +74,30 @@ export const formatAsMarkdown = (data: any): string => {
           
           if (requestBody.content) {
             Object.entries(requestBody.content).forEach(([contentType, content]: [string, any]) => {
-              markdown += `**Content Type:** ${contentType}\n\n`;
-              
+              markdown += `*Content-Type: ${contentType}*\n`;
               if (content.schema) {
-                markdown += formatSchema(content.schema);
-                markdown += '\n';
+                markdown += formatSchema(content.schema, data, 1);
               }
+              markdown += '\n';
             });
           }
         }
         
         // Responses
         if (operation.responses && Object.keys(operation.responses).length > 0) {
-          markdown += `##### Responses\n\n`;
-          
+          markdown += `**Responses:**\n`;
           Object.entries(operation.responses).forEach(([code, responseRef]: [string, any]) => {
             const response = resolveRef(responseRef);
-            markdown += `###### ${code} - ${response.description || ''}\n\n`;
-            
+            markdown += `- \`${code}\`: ${response.description || ''}\n`;
             if (response.content) {
               Object.entries(response.content).forEach(([contentType, content]: [string, any]) => {
-                markdown += `**Content Type:** ${contentType}\n\n`;
-                
-                if (content.schema) {
-                  markdown += formatSchema(content.schema);
-                  markdown += '\n';
-                }
+                 markdown += `  - *${contentType}*: \`${formatSchemaType(content.schema)}\`\n`;
               });
             }
           });
+          markdown += '\n';
         }
+        markdown += '---\n\n';
       });
     });
   }
@@ -120,15 +105,12 @@ export const formatAsMarkdown = (data: any): string => {
   // Add schemas
   if (data.components?.schemas) {
     markdown += `## Schemas\n\n`;
-    
     Object.entries(data.components.schemas).forEach(([name, schema]: [string, any]) => {
       markdown += `### ${name}\n\n`;
-      
       if (schema.description) {
         markdown += `${schema.description}\n\n`;
       }
-      
-      markdown += formatSchema(schema);
+      markdown += formatSchema(schema, data);
       markdown += '\n';
     });
   }
@@ -136,67 +118,64 @@ export const formatAsMarkdown = (data: any): string => {
   return markdown;
 };
 
-/**
- * Format schema type for display
- */
 const formatSchemaType = (schema: any): string => {
   if (!schema) return '';
-  
   if (schema.$ref) {
     return schema.$ref.split('/').pop() || '';
   }
-  
   if (schema.type === 'array' && schema.items) {
-    return `array[${formatSchemaType(schema.items)}]`;
+    const itemType = formatSchemaType(schema.items);
+    return itemType ? `array<${itemType}>` : 'array';
   }
-  
   return schema.type || '';
 };
 
-/**
- * Format schema as Markdown
- */
-const formatSchema = (schema: any, indent = 0): string => {
-  if (!schema) return '';
-  
-  const indentStr = '  '.repeat(indent);
-  let markdown = '';
-  
-  if (schema.$ref) {
-    return `${indentStr}- Reference: ${schema.$ref.split('/').pop()}\n`;
-  }
-  
-  if (schema.type === 'object' && schema.properties) {
-    markdown += `${indentStr}**Properties:**\n\n`;
+const formatSchema = (schema: any, data: any, indent = 0): string => {
+    if (!schema) return '';
     
-    Object.entries(schema.properties).forEach(([propName, propSchema]: [string, any]) => {
-      const required = schema.required?.includes(propName) ? '(required)' : '';
-      const type = formatSchemaType(propSchema);
-      
-      markdown += `${indentStr}- **${propName}** ${required}: ${type}`;
-      
-      if (propSchema.description) {
-        markdown += ` - ${propSchema.description}`;
-      }
-      
-      markdown += '\n';
-      
-      if (propSchema.type === 'object' && propSchema.properties) {
-        markdown += formatSchema(propSchema, indent + 1);
-      } else if (propSchema.type === 'array' && propSchema.items?.properties) {
-        markdown += formatSchema(propSchema.items, indent + 1);
-      }
-    });
-  } else if (schema.type === 'array' && schema.items) {
-    markdown += `${indentStr}**Array items:** ${formatSchemaType(schema.items)}\n`;
+    const indentStr = '  '.repeat(indent);
+    let markdown = '';
+
+    const resolveRef = (refObj: any) => {
+        if (!refObj?.$ref) return refObj;
+        const refPath = refObj.$ref.replace('#/components/', '').split('/');
+        let current = data.components;
+        for (const part of refPath) {
+            current = current?.[part];
+        }
+        return current || refObj;
+    };
     
-    if (schema.items.type === 'object' && schema.items.properties) {
-      markdown += formatSchema(schema.items, indent + 1);
+    const currentSchema = schema?.$ref ? resolveRef(schema) : schema;
+    
+    if (schema.$ref) {
+        const refName = schema.$ref.split('/').pop();
+        if (schema.$ref.includes('/schemas/')) {
+            return `${indentStr}- Refers to Schema: \`${refName}\`\n`;
+        }
     }
-  } else {
-    const type = formatSchemaType(schema);
-    markdown += `${indentStr}**Type:** ${type}\n`;
-  }
-  
-  return markdown;
-}; 
+
+    if (currentSchema.type === 'object' && currentSchema.properties) {
+        markdown += `${indentStr}**Properties:**\n`;
+        Object.entries(currentSchema.properties).forEach(([propName, propSchema]: [string, any]) => {
+            const required = currentSchema.required?.includes(propName) ? ' (required)' : '';
+            const type = formatSchemaType(propSchema);
+            markdown += `${indentStr}- \`${propName}\`${required}: \`${type}\``;
+            if (propSchema.description) markdown += ` - ${propSchema.description}`;
+            markdown += '\n';
+
+            const resolvedProp = resolveRef(propSchema);
+            if (resolvedProp.type === 'object' || (resolvedProp.type === 'array' && resolveRef(resolvedProp.items).type === 'object')) {
+                markdown += formatSchema(resolvedProp.type === 'array' ? resolvedProp.items : resolvedProp, data, indent + 1);
+            }
+        });
+    } else if (currentSchema.type === 'array' && currentSchema.items) {
+        markdown += `${indentStr}**Array of:** \`${formatSchemaType(currentSchema.items)}\`\n`;
+        if (resolveRef(currentSchema.items).type === 'object') {
+            markdown += formatSchema(currentSchema.items, data, indent + 1);
+        }
+    } else if (currentSchema.type) {
+        markdown += `${indentStr}**Type:** \`${currentSchema.type}\`\n`;
+    }
+    return markdown;
+};

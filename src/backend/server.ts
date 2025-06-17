@@ -157,6 +157,7 @@ export const app = new Elysia()
         transform: {
           removeExamples: body.transform?.removeExamples ?? false,
           removeDescriptions: body.transform?.removeDescriptions ?? false,
+          removeSummaries: body.transform?.removeSummaries ?? false,
           includeServers: body.transform?.includeServers ?? true,
           includeInfo: body.transform?.includeInfo ?? true,
         },
@@ -231,6 +232,7 @@ export const app = new Elysia()
           t.Object({
             removeExamples: t.Optional(t.Boolean()),
             removeDescriptions: t.Optional(t.Boolean()),
+            removeSummaries: t.Optional(t.Boolean()),
             includeServers: t.Optional(t.Boolean()),
             includeInfo: t.Optional(t.Boolean()),
           })

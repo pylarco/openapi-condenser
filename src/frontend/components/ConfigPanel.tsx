@@ -126,6 +126,12 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, out
             tooltip="If checked, all 'description' fields will be removed."
         />
         <Switch 
+            label="Remove Summaries"
+            checked={!!config.transform.removeSummaries}
+            onChange={v => handleTransformChange('removeSummaries', v)}
+            tooltip="If checked, all 'summary' fields will be removed."
+        />
+        <Switch 
             label="Include Servers"
             checked={!!config.transform.includeServers}
             onChange={v => handleTransformChange('includeServers', v)}
