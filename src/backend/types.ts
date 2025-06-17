@@ -8,6 +8,7 @@ export type FilterPatterns = {
 export type FilterOptions = {
   paths?: FilterPatterns;
   tags?: FilterPatterns;
+  operationIds?: FilterPatterns;
   methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
   includeDeprecated?: boolean;
 };

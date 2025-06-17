@@ -104,7 +104,10 @@ export const app = new Elysia()
         output: {
           format: body.output.format,
         },
-        filter: body.filter,
+        filter: {
+          ...body.filter,
+          includeDeprecated: body.filter?.includeDeprecated ?? false,
+        },
         transform: body.transform,
       };
 
@@ -156,6 +159,10 @@ export const app = new Elysia()
             tags: t.Optional(t.Object({
                 include: t.Optional(t.Array(t.String())),
                 exclude: t.Optional(t.Array(t.String())),
+            })),
+            operationIds: t.Optional(t.Object({
+              include: t.Optional(t.Array(t.String())),
+              exclude: t.Optional(t.Array(t.String())),
             })),
             methods: t.Optional(t.Array(t.Union([
                 t.Literal('get'),

@@ -248,21 +248,14 @@ export const transformOpenAPI = (
     result.paths = filterPaths(result.paths, filterOpts);
   }
   
-  // After filtering, remove components that are no longer referenced.
+  // Then, remove any components that are no longer referenced
   result = removeUnusedComponents(result);
-  
-  // Then apply transformations on the filtered spec
+
+  // Apply other transformations to the entire remaining spec
   if (transformOpts) {
-    if (!transformOpts.includeServers) {
-      delete result.servers;
-    }
-    if (!transformOpts.includeInfo) {
-      delete result.info;
-    }
-    // Apply recursive transformations to the entire document
     result = transformSchema(result, transformOpts);
   }
-  
+
   return result;
 };
 

@@ -245,7 +245,7 @@ describe('E2E API Tests', () => {
 
         if (error?.value && 'success' in error.value && 'errors' in error.value) {
             expect(error.value.success).toBe(false);
-            expect(error.value.errors).toInclude('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
+            expect(error.value.errors).toContain('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
         } else {
             throw new Error('Unexpected error response format');
         }
