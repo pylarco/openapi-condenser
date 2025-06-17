@@ -1,30 +1,3 @@
-Of course. I made changes to four files to reduce code duplication and replace imperative `if/switch` statements with more declarative patterns.
-
-Here is a summary of the changes:
-
-### 1. New File: `src/backend/formatters/concise-text.ts`
-
-*   **Purpose:** I created this new file to abstract the shared logic from the `markdown.ts` and `yaml.ts` formatters, which were nearly identical. This new "concise text" formatter contains all the logic for generating the human-readable, LLM-friendly output format.
-*   **Key Improvement:** The `shortenContentType` helper function, which used a chain of `if` statements, was refactored to use a `ReadonlyArray` of mappings. This is a cleaner, more declarative lookup table.
-
-### 2. Modified File: `src/backend/formatters/index.ts`
-
-*   **Change:** The `getFormatter` function originally used a `switch` statement to return the correct formatter based on the `OutputFormat`.
-*   **Improvement:** I replaced the `switch` statement with a `Record<OutputFormat, Formatter>` (a dispatch map). This is a common and more professional pattern for such lookups, making the code cleaner and easier to extend.
-
-### 3. Modified File: `src/backend/formatters/markdown.ts`
-
-*   **Change:** This file was completely simplified. All its previous logic was moved to the new `concise-text.ts` file.
-*   **Improvement:** It now just imports `formatAsConciseText` and re-exports it as `formatAsMarkdown`, eliminating significant code duplication.
-
-### 4. Modified File: `src/backend/formatters/yaml.ts`
-
-*   **Change:** Similar to the markdown formatter, this file was simplified by removing all its implementation details.
-*   **Improvement:** It now imports and re-exports the shared `formatAsConciseText` function, just like the markdown formatter. This ensures both formatters stay in sync and are maintained in a single place.
-
-Here is the code for the new and affected files:
-
-```typescript // src/backend/formatters/concise-text.ts
 import { OpenAPIV3 } from 'openapi-types';
 
 const resolveRef = <T extends object>(
@@ -250,47 +223,3 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
   
   return output.trim();
 };
-```
-```typescript // src/backend/formatters/index.ts
-import { formatAsJson } from './json';
-import { formatAsYaml } from './yaml';
-import { formatAsXml } from './xml';
-import { formatAsMarkdown } from './markdown';
-import type { OutputFormat } from '../types';
-import { OpenAPIV3 } from 'openapi-types';
-
-export interface Formatter {
-  format: (data: OpenAPIV3.Document) => string;
-}
-
-const formatters: Record<OutputFormat, Formatter> = {
-  json: { format: formatAsJson },
-  yaml: { format: formatAsYaml },
-  xml: { format: formatAsXml },
-  markdown: { format: formatAsMarkdown },
-};
-
-export const getFormatter = (format: OutputFormat): Formatter => {
-  const formatter = formatters[format];
-  if (!formatter) {
-    throw new Error(`Unsupported output format: ${format}`);
-  }
-  return formatter;
-};
-```
-```typescript // src/backend/formatters/markdown.ts
-import { formatAsConciseText } from './concise-text';
-
-/**
- * Format data as a concise markdown format for LLMs.
- */
-export const formatAsMarkdown = formatAsConciseText;
-```
-```typescript // src/backend/formatters/yaml.ts
-import { formatAsConciseText } from './concise-text';
-
-/**
- * Format data as a concise YAML-like format for LLMs.
- */
-export const formatAsYaml = formatAsConciseText;
-```
