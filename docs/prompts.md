@@ -27,3 +27,13 @@ I need to create a Bun program that helps process large OpenAPI specification fi
    - ✅ Invalid configurations
    - ✅ Missing required fields
    - ✅ Network errors when fetching remote specs
+
+
+
+--------------------------------
+
+that tool purpose is to condense large openapi for LLM to digest & understand the whole context. beside the tool can be used by developer. above tool should also can be used by general user. so please create the frontend using react, vite, cdn tailwind, elysiajs + eden treaty. make sure the UI is amazingly beautiful and the UX is so cohesive.
+
+--------------------------------
+
+do @iterate.mdc on fixing `bun tsc -b -noEmit` problems while following rule @elysia.rule.mdc  .. also make sure bun dev runs well

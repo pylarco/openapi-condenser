@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mastra/mcp-docs-server@latest"
+      ]
+    },
+    "browser-tools": {
+      "command": "npx",
+      "args": [
+        "-y @agentdeskai/browser-tools-mcp@1.2.0"
+      ],
+      "enabled": true
+    },
+    "context7": {
+      "command": "bunx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}
