@@ -1,4 +1,4 @@
-# OpenAPI Extractor
+# OpenAPI Condenser
 
 A powerful Bun tool to process large OpenAPI specification files and extract useful information in various formats.
 
@@ -16,8 +16,8 @@ A powerful Bun tool to process large OpenAPI specification files and extract use
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/openapi-extractor.git
-cd openapi-extractor
+git clone https://github.com/yourusername/openapi-condenser.git
+cd openapi-condenser
 
 # Install dependencies
 bun install
@@ -46,7 +46,7 @@ bun run start --source https://example.com/api/openapi.json --source-type remote
 
 ### Configuration File
 
-Create an `openapi-extractor.config.ts` file:
+Create an `openapi-condenser.config.ts` file:
 
 ```typescript
 import type { ExtractorConfig } from './src/types';

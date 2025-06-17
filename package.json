@@ -1,5 +1,5 @@
 {
-  "name": "openapi-extractor",
+  "name": "openapi-condenser",
   "module": "index.ts",
   "type": "module",
   "private": true,

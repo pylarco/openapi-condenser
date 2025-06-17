@@ -54,7 +54,7 @@ export const extractOpenAPI = async (
  * Load configuration from file
  */
 export const loadConfig = async (
-  configPath: string = './openapi-extractor.config.ts'
+  configPath: string = './openapi-condenser.config.ts'
 ): Promise<ExtractorConfig> => {
   try {
     // Convert file path to URL for import()

@@ -6,7 +6,7 @@ import type { ExtractorConfig } from './src/types';
 
 // Define CLI command
 const cmd = command({
-  name: 'openapi-extractor',
+  name: 'openapi-condenser',
   description: 'Extract and transform OpenAPI specifications',
   args: {
     config: option({
@@ -66,7 +66,7 @@ const cmd = command({
   handler: async (args) => {
     try {
       // Load configuration
-      const configPath = args.config || './openapi-extractor.config.ts';
+      const configPath = args.config || './openapi-condenser.config.ts';
       let config: ExtractorConfig;
       
       try {
