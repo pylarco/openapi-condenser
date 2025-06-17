@@ -69,6 +69,18 @@ const cmd = command({
       long: 'include-deprecated',
       description: 'Include deprecated endpoints',
     }),
+    excludeSchemas: flag({
+      long: 'exclude-schemas',
+      description: 'Exclude component schemas from the output',
+    }),
+    excludeRequestBodies: flag({
+      long: 'exclude-request-bodies',
+      description: 'Exclude request bodies from the output',
+    }),
+    excludeResponses: flag({
+      long: 'exclude-responses',
+      description: 'Exclude responses from the output',
+    }),
     verbose: flag({
       long: 'verbose',
       short: 'v',

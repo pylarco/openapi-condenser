@@ -16,6 +16,9 @@ const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
     removeSummaries: false,
     includeServers: true,
     includeInfo: true,
+    includeSchemas: true,
+    includeRequestBodies: true,
+    includeResponses: true,
   },
 };
 

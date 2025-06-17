@@ -23,6 +23,9 @@ export type TransformOptions = {
   removeSummaries?: boolean;
   includeServers?: boolean;
   includeInfo?: boolean;
+  includeSchemas?: boolean;
+  includeRequestBodies?: boolean;
+  includeResponses?: boolean;
 };
 
 export type Source =

@@ -63,6 +63,36 @@ export const ConfigPanel: React.FC = () => {
 
       <Section title="Transformation">
         <Switch 
+            label="Include Info"
+            checked={!!config.transform.includeInfo}
+            onChange={v => handleTransformChange('includeInfo', v)}
+            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
+        />
+        <Switch 
+            label="Include Servers"
+            checked={!!config.transform.includeServers}
+            onChange={v => handleTransformChange('includeServers', v)}
+            tooltip="If checked, the 'servers' block will be included."
+        />
+        <Switch 
+            label="Include Responses"
+            checked={!!config.transform.includeResponses}
+            onChange={v => handleTransformChange('includeResponses', v)}
+            tooltip="If checked, the 'responses' block for each endpoint will be included."
+        />
+        <Switch 
+            label="Include Request Bodies"
+            checked={!!config.transform.includeRequestBodies}
+            onChange={v => handleTransformChange('includeRequestBodies', v)}
+            tooltip="If checked, the 'requestBody' block for each endpoint will be included."
+        />
+        <Switch 
+            label="Include Schemas"
+            checked={!!config.transform.includeSchemas}
+            onChange={v => handleTransformChange('includeSchemas', v)}
+            tooltip="If checked, the 'components/schemas' block will be included."
+        />
+        <Switch 
             label="Remove Examples"
             checked={!!config.transform.removeExamples}
             onChange={v => handleTransformChange('removeExamples', v)}
@@ -79,18 +109,6 @@ export const ConfigPanel: React.FC = () => {
             checked={!!config.transform.removeSummaries}
             onChange={v => handleTransformChange('removeSummaries', v)}
             tooltip="If checked, all 'summary' fields will be removed."
-        />
-        <Switch 
-            label="Include Servers"
-            checked={!!config.transform.includeServers}
-            onChange={v => handleTransformChange('includeServers', v)}
-            tooltip="If checked, the 'servers' block will be included."
-        />
-        <Switch 
-            label="Include Info"
-            checked={!!config.transform.includeInfo}
-            onChange={v => handleTransformChange('includeInfo', v)}
-            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
         />
       </Section>
       

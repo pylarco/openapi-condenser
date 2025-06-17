@@ -165,6 +165,9 @@ export const app = new Elysia()
           removeSummaries: body.transform?.removeSummaries ?? false,
           includeServers: body.transform?.includeServers ?? true,
           includeInfo: body.transform?.includeInfo ?? true,
+          includeSchemas: body.transform?.includeSchemas ?? true,
+          includeRequestBodies: body.transform?.includeRequestBodies ?? true,
+          includeResponses: body.transform?.includeResponses ?? true,
         },
       };
 
@@ -241,6 +244,9 @@ export const app = new Elysia()
             removeSummaries: t.Optional(t.Boolean()),
             includeServers: t.Optional(t.Boolean()),
             includeInfo: t.Optional(t.Boolean()),
+            includeSchemas: t.Optional(t.Boolean()),
+            includeRequestBodies: t.Optional(t.Boolean()),
+            includeResponses: t.Optional(t.Boolean()),
           })
         ),
       }),

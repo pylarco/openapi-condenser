@@ -324,12 +324,43 @@ export const transformOpenAPI = (
 ): OpenAPIV3.Document => {
   let transformed: OpenAPIV3.Document = JSON.parse(JSON.stringify(openapi));
 
-  // Apply filtering
+  // 1. Apply path/method/tag filtering
   if (filterOpts && transformed.paths) {
     transformed.paths = filterPaths(transformed.paths, filterOpts);
   }
 
-  // Apply transformations on the entire document
+  // 2. Apply structural removals based on transformOpts
+  if (transformOpts) {
+    if (transformOpts.includeServers === false) {
+      delete transformed.servers;
+    }
+    if (transformOpts.includeInfo === false) {
+      delete transformed.info;
+    }
+
+    if (transformed.paths) {
+      for (const path in transformed.paths) {
+        const pathItem = transformed.paths[path];
+        if (pathItem) {
+          for (const method of httpMethods) {
+            const operation = pathItem[method] as
+              | OpenAPIV3.OperationObject
+              | undefined;
+            if (operation) {
+              if (transformOpts.includeRequestBodies === false) {
+                delete operation.requestBody;
+              }
+              if (transformOpts.includeResponses === false) {
+                delete operation.responses;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Apply granular transformations (remove descriptions/examples etc)
   if (transformOpts) {
     transformed = transformSchema(
       transformed,
@@ -337,8 +368,16 @@ export const transformOpenAPI = (
     ) as OpenAPIV3.Document;
   }
 
-  // Then, remove any components that are no longer referenced
+  // 4. Clean up unused components based on what's left.
   transformed = removeUnusedComponents(transformed);
+
+  // 5. If schemas are explicitly excluded, remove them now.
+  if (transformOpts?.includeSchemas === false && transformed.components) {
+    delete transformed.components.schemas;
+    if (Object.keys(transformed.components).length === 0) {
+      delete transformed.components;
+    }
+  }
 
   return transformed;
 };

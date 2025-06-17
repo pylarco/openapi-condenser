@@ -200,6 +200,21 @@ export const mergeWithCommandLineArgs = (
   if (args.includeDeprecated) {
     result.filter.includeDeprecated = args.includeDeprecated;
   }
+
+  // Initialize transform if it doesn't exist
+  if (!result.transform) {
+    result.transform = {};
+  }
+
+  if (args.excludeSchemas) {
+    result.transform.includeSchemas = false;
+  }
+  if (args.excludeRequestBodies) {
+    result.transform.includeRequestBodies = false;
+  }
+  if (args.excludeResponses) {
+    result.transform.includeResponses = false;
+  }
   
   return result;
 };
