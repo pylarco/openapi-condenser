@@ -1715,76 +1715,6 @@ import type { App } from '../backend/server';
 export const client = edenTreaty<App>('http://localhost:3000');
 ```
 
-## File: test/unit/extractor.test.ts
-```typescript
-import { describe, it, expect } from 'bun:test';
-import { calculateSpecStats } from '../../src/backend/extractor';
-import { OpenAPIV3 } from 'openapi-types';
-
-describe('extractor.ts unit tests', () => {
-    describe('calculateSpecStats', () => {
-        it('should return zero for an empty or invalid spec', () => {
-            expect(calculateSpecStats(null as any)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
-            const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
-            expect(emptyStats.paths).toBe(0);
-            expect(emptyStats.operations).toBe(0);
-            expect(emptyStats.schemas).toBe(0);
-            expect(emptyStats.charCount).toBe(2); // {}
-        });
-
-        it('should correctly count paths, operations, and schemas', () => {
-            const spec: Partial<OpenAPIV3.Document> = {
-                paths: {
-                    '/users': {
-                        get: { summary: 'Get users' },
-                        post: { summary: 'Create user' }
-                    },
-                    '/users/{id}': {
-                        get: { summary: 'Get user by id' },
-                        put: { summary: 'Update user' },
-                        delete: { summary: 'Delete user' },
-                        // This should not be counted as an operation
-                        parameters: [{ name: 'id', in: 'path' }]
-                    },
-                    '/health': {
-                        get: { summary: 'Health check' }
-                    }
-                },
-                components: {
-                    schemas: {
-                        User: { type: 'object' },
-                        Error: { type: 'object' }
-                    }
-                }
-            };
-            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
-            expect(stats.paths).toBe(3);
-            expect(stats.operations).toBe(6);
-            expect(stats.schemas).toBe(2);
-            expect(stats.charCount).toBeGreaterThan(100);
-            expect(stats.lineCount).toBeGreaterThan(10);
-            expect(stats.tokenCount).toBeGreaterThan(25);
-        });
-
-        it('should handle paths with no valid methods', () => {
-            const spec: Partial<OpenAPIV3.Document> = {
-                paths: {
-                    '/users': {
-                        'x-custom-property': 'value',
-                        parameters: []
-                    }
-                },
-                components: {}
-            };
-            const stats = calculateSpecStats(spec as OpenAPIV3.Document);
-            expect(stats.paths).toBe(1);
-            expect(stats.operations).toBe(0);
-            expect(stats.schemas).toBe(0);
-        });
-    });
-});
-```
-
 ## File: src/backend/formatters/markdown.ts
 ```typescript
 import { OpenAPIV3 } from 'openapi-types';
@@ -2126,213 +2056,81 @@ export const parseContent = (
 };
 ```
 
-## File: src/backend/extractor.ts
+## File: test/unit/extractor.test.ts
 ```typescript
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
-import { fetchSpec } from './utils/fetcher';
-import { transformOpenAPI } from './transformer';
-import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { OpenAPIV3, OpenAPI } from 'openapi-types';
+import { describe, it, expect } from 'bun:test';
+import { calculateSpecStats } from '../../src/backend/extractor';
+import { OpenAPIV3 } from 'openapi-types';
 
-export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
-  if (!spec || typeof spec !== 'object') {
-    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
-  }
+describe('extractor.ts unit tests', () => {
+    describe('calculateSpecStats', () => {
+        it('should return zero for an empty or invalid spec', () => {
+            const spec = null;
+            expect(calculateSpecStats(spec as unknown as OpenAPIV3.Document)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
+            const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
+            expect(emptyStats.paths).toBe(0);
+            expect(emptyStats.operations).toBe(0);
+            expect(emptyStats.schemas).toBe(0);
+            expect(emptyStats.charCount).toBe(2); // {}
+        });
 
-  const specString = JSON.stringify(spec);
-  const prettySpecString = JSON.stringify(spec, null, 2);
+        it('should correctly count paths, operations, and schemas', () => {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
+                paths: {
+                    '/users': {
+                        get: { summary: 'Get users', responses: { '200': { description: 'OK' } } },
+                        post: { summary: 'Create user', responses: { '200': { description: 'OK' } } }
+                    },
+                    '/users/{id}': {
+                        get: { summary: 'Get user by id', responses: { '200': { description: 'OK' } } },
+                        put: { summary: 'Update user', responses: { '200': { description: 'OK' } } },
+                        delete: { summary: 'Delete user', responses: { '200': { description: 'OK' } } },
+                        // This should not be counted as an operation
+                        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+                    },
+                    '/health': {
+                        get: { summary: 'Health check', responses: { '200': { description: 'OK' } } }
+                    }
+                },
+                components: {
+                    schemas: {
+                        User: { type: 'object' },
+                        Error: { type: 'object' }
+                    }
+                }
+            };
+            const stats = calculateSpecStats(spec);
+            expect(stats.paths).toBe(3);
+            expect(stats.operations).toBe(6);
+            expect(stats.schemas).toBe(2);
+            expect(stats.charCount).toBeGreaterThan(100);
+            expect(stats.lineCount).toBeGreaterThan(10);
+            expect(stats.tokenCount).toBeGreaterThan(25);
+        });
 
-  const charCount = specString.length;
-  const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count, as it varies by model.
-  // 1 token is roughly 4 characters for English text.
-  const tokenCount = Math.ceil(charCount / 4);
+        it('should handle paths with no valid methods', () => {
+            const usersPath: OpenAPIV3.PathItemObject = {
+                parameters: [],
+            };
+            Object.assign(usersPath, { 'x-custom-property': 'value' });
 
-  const validMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
-  const paths = Object.keys(spec.paths || {});
-  const operations = paths.reduce((count, path) => {
-    const pathItem = spec.paths[path];
-    if (pathItem && typeof pathItem === 'object') {
-      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
-    }
-    return count;
-  }, 0);
-  const schemas = Object.keys(spec.components?.schemas || {}).length;
-
-  return {
-    paths: paths.length,
-    operations: operations,
-    schemas: schemas,
-    charCount,
-    lineCount,
-    tokenCount,
-  };
-};
-
-export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
-    const charCount = output.length;
-    const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / 4);
-
-    return { charCount, lineCount, tokenCount };
-}
-
-const isV3Document = (
-  doc: OpenAPI.Document,
-): doc is OpenAPIV3.Document => {
-  return 'openapi' in doc && doc.openapi.startsWith('3');
-};
-
-/**
- * Extract OpenAPI information based on configuration
- */
-export const extractOpenAPI = async (
-  config: ExtractorConfig
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source);
-    
-    if (!result.success || !result.data) {
-      return result;
-    }
-    
-    if (typeof result.data === 'string') {
-      return {
-        success: false,
-        errors: ['Invalid spec format after fetching. Expected a document object.'],
-      };
-    }
-    
-    if (!isV3Document(result.data)) {
-      return {
-        success: false,
-        errors: ['Only OpenAPI v3 documents are supported.'],
-      };
-    }
-    
-    const beforeStats = calculateSpecStats(result.data);
-
-    // Apply transformations
-    const transformed = transformOpenAPI(
-      result.data,
-      config.filter,
-      config.transform
-    );
-    
-    const afterSpecStats = calculateSpecStats(transformed);
-    
-    // Format output
-    const formatter = getFormatter(config.output.format);
-    const formattedOutput = formatter.format(transformed);
-    
-    const afterOutputStats = calculateOutputStats(formattedOutput);
-
-    const afterStats: SpecStats = {
-      ...afterSpecStats,
-      ...afterOutputStats,
-    };
-    // Write output to file if destination is provided
-    if (config.output.destination) {
-      const outputPath = config.output.destination;
-      await fs.mkdir(dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
-    }
-    
-    return {
-      success: true,
-      data: formattedOutput,
-      stats: {
-        before: beforeStats,
-        after: afterStats,
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
-    };
-  }
-};
-
-/**
- * Load configuration from file
- */
-export const loadConfig = async (
-  configPath: string = './openapi-condenser.config.ts'
-): Promise<ExtractorConfig> => {
-  try {
-    // Convert file path to URL for import()
-    const fileUrl = `file://${join(process.cwd(), configPath)}`;
-    
-    // Import configuration
-    const module = await import(fileUrl);
-    return module.default as ExtractorConfig;
-  } catch (error) {
-    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Merge command line arguments with configuration
- */
-export const mergeWithCommandLineArgs = (
-  config: ExtractorConfig,
-  args: Record<string, any>
-): ExtractorConfig => {
-  // Deep copy to avoid mutating the original config object
-  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
-  
-  // Override source settings
-  if (args.source) {
-    result.source.path = args.source;
-  }
-  
-  if (args.sourceType) {
-    result.source.type = args.sourceType as 'local' | 'remote';
-  }
-  
-  // Override output settings
-  if (args.format) {
-    result.output.format = args.format;
-  }
-  
-  if (args.outputPath) {
-    result.output.destination = args.outputPath;
-  }
-  
-  // Initialize filter if it doesn't exist
-  if (!result.filter) {
-    result.filter = {};
-  }
-  
-  // Override filter settings
-  if (args.includePaths) {
-    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
-  }
-  if (args.excludePaths) {
-    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
-  }
-  
-  if (args.includeTags) {
-    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
-  }
-  if (args.excludeTags) {
-    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
-  }
-  
-  if (args.methods) {
-    result.filter.methods = args.methods.split(',');
-  }
-  
-  if (args.includeDeprecated) {
-    result.filter.includeDeprecated = args.includeDeprecated;
-  }
-  
-  return result;
-};
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
+                paths: {
+                    '/users': usersPath
+                },
+                components: {}
+            };
+            const stats = calculateSpecStats(spec);
+            expect(stats.paths).toBe(1);
+            expect(stats.operations).toBe(0);
+            expect(stats.schemas).toBe(0);
+        });
+    });
+});
 ```
 
 ## File: test/e2e/server.test.ts
@@ -2651,6 +2449,215 @@ describe('E2E API Tests', () => {
   "include": ["src", "openapi-condenser.config.ts", "vite.config.ts", "test"],
   "exclude": ["node_modules", "dist"]
 }
+```
+
+## File: src/backend/extractor.ts
+```typescript
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
+import { fetchSpec } from './utils/fetcher';
+import { transformOpenAPI } from './transformer';
+import { getFormatter } from './formatters';
+import { promises as fs } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { OpenAPIV3, OpenAPI } from 'openapi-types';
+
+export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
+  if (!spec || typeof spec !== 'object') {
+    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
+  }
+
+  const compactSpecString = JSON.stringify(spec);
+  const prettySpecString = JSON.stringify(spec, null, 2);
+
+  const charCount = prettySpecString.length;
+  const lineCount = prettySpecString.split('\n').length;
+  // Rough approximation of token count, as it varies by model.
+  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
+  const tokenCount = Math.ceil(compactSpecString.length / 4);
+
+  const validMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+  const paths = Object.keys(spec.paths || {});
+  const operations = paths.reduce((count, path) => {
+    const pathItem = spec.paths[path];
+    if (pathItem && typeof pathItem === 'object') {
+      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
+    }
+    return count;
+  }, 0);
+  const schemas = Object.keys(spec.components?.schemas || {}).length;
+
+  return {
+    paths: paths.length,
+    operations: operations,
+    schemas: schemas,
+    charCount,
+    lineCount,
+    tokenCount,
+  };
+};
+
+export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
+    const charCount = output.length;
+    const lineCount = output.split('\n').length;
+    const tokenCount = Math.ceil(charCount / 4);
+
+    return { charCount, lineCount, tokenCount };
+}
+
+const isV3Document = (
+  doc: OpenAPI.Document,
+): doc is OpenAPIV3.Document => {
+  return 'openapi' in doc && doc.openapi.startsWith('3');
+};
+
+/**
+ * Extract OpenAPI information based on configuration
+ */
+export const extractOpenAPI = async (
+  config: ExtractorConfig
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    // Fetch OpenAPI spec
+    const result = await fetchSpec(config.source);
+    
+    if (!result.success || !result.data) {
+      return result;
+    }
+    
+    if (typeof result.data === 'string') {
+      return {
+        success: false,
+        errors: ['Invalid spec format after fetching. Expected a document object.'],
+      };
+    }
+    
+    if (!isV3Document(result.data)) {
+      return {
+        success: false,
+        errors: ['Only OpenAPI v3 documents are supported.'],
+      };
+    }
+    
+    const beforeStats = calculateSpecStats(result.data);
+
+    // Apply transformations
+    const transformed = transformOpenAPI(
+      result.data,
+      config.filter,
+      config.transform
+    );
+    
+    const afterSpecStats = calculateSpecStats(transformed);
+    
+    // Format output
+    const formatter = getFormatter(config.output.format);
+    const formattedOutput = formatter.format(transformed);
+    
+    const afterOutputStats = calculateOutputStats(formattedOutput);
+
+    const afterStats: SpecStats = {
+      ...afterSpecStats,
+      ...afterOutputStats,
+    };
+    // Write output to file if destination is provided
+    if (config.output.destination) {
+      const outputPath = config.output.destination;
+      await fs.mkdir(dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
+    }
+    
+    return {
+      success: true,
+      data: formattedOutput,
+      stats: {
+        before: beforeStats,
+        after: afterStats,
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
+    };
+  }
+};
+
+/**
+ * Load configuration from file
+ */
+export const loadConfig = async (
+  configPath: string = './openapi-condenser.config.ts'
+): Promise<ExtractorConfig> => {
+  try {
+    // Convert file path to URL for import()
+    const fileUrl = `file://${join(process.cwd(), configPath)}`;
+    
+    // Import configuration
+    const module = await import(fileUrl);
+    return module.default as ExtractorConfig;
+  } catch (error) {
+    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Merge command line arguments with configuration
+ */
+export const mergeWithCommandLineArgs = (
+  config: ExtractorConfig,
+  args: Record<string, any>
+): ExtractorConfig => {
+  // Deep copy to avoid mutating the original config object
+  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
+  
+  // Override source settings
+  if (args.source) {
+    result.source.path = args.source;
+  }
+  
+  if (args.sourceType) {
+    result.source.type = args.sourceType as 'local' | 'remote';
+  }
+  
+  // Override output settings
+  if (args.format) {
+    result.output.format = args.format;
+  }
+  
+  if (args.outputPath) {
+    result.output.destination = args.outputPath;
+  }
+  
+  // Initialize filter if it doesn't exist
+  if (!result.filter) {
+    result.filter = {};
+  }
+  
+  // Override filter settings
+  if (args.includePaths) {
+    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
+  }
+  if (args.excludePaths) {
+    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
+  }
+  
+  if (args.includeTags) {
+    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
+  }
+  if (args.excludeTags) {
+    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
+  }
+  
+  if (args.methods) {
+    result.filter.methods = args.methods.split(',');
+  }
+  
+  if (args.includeDeprecated) {
+    result.filter.includeDeprecated = args.includeDeprecated;
+  }
+  
+  return result;
+};
 ```
 
 ## File: src/backend/transformer.ts
@@ -3208,7 +3215,7 @@ export const app = new Elysia()
       return { content };
 
     } catch (e) {
-      if (e instanceof TypeError && e.message.includes('Invalid URL')) {
+      if (e instanceof TypeError) {
         set.status = 400;
         return { error: `Invalid URL provided: ${url}` };
       }
@@ -3221,6 +3228,7 @@ export const app = new Elysia()
   }, {
     query: t.Object({
       url: t.Optional(t.String({
+        format: 'uri-reference',
         description: 'A public URL to an OpenAPI specification file.',
         error: 'Invalid URL format provided.'
       }))
@@ -3324,6 +3332,7 @@ export const app = new Elysia()
                 t.Literal('patch'),
                 t.Literal('options'),
                 t.Literal('head'),
+                t.Literal('trace'),
             ]))),
             includeDeprecated: t.Optional(t.Boolean()),
           })
