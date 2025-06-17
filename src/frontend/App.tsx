@@ -4,6 +4,7 @@ import { ConfigPanel } from './components/ConfigPanel';
 import { InputPanel } from './components/InputPanel';
 import { OutputPanel } from './components/OutputPanel';
 import { StatsPanel } from './components/StatsPanel';
+import { client } from './client';
 
 const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
   filter: {
@@ -49,6 +50,7 @@ export default function App() {
       source: {
         content: specContent,
         path: fileName,
+        type: 'memory' as const
       },
       output: {
         format: outputFormat,
@@ -58,26 +60,22 @@ export default function App() {
     };
 
     try {
-      // Make a fetch call directly instead of using client
-      const response = await fetch('http://localhost:3000/api/condense', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        if (errorData && errorData.errors) {
-          setError(errorData.errors.join('\n'));
-        } else {
-          setError(errorData.error || 'An unknown error occurred');
+      const { data, error } = await client.api.condense.post(payload);
+      
+      if (error) {
+        let errorMessage = 'An unknown error occurred.';
+        const errorValue = error.value as any;
+        if (typeof errorValue === 'object' && errorValue !== null) {
+          if ('errors' in errorValue && Array.isArray(errorValue.errors)) {
+            errorMessage = errorValue.errors.join('\n');
+          } else if ('message' in errorValue && typeof errorValue.message === 'string') {
+            errorMessage = errorValue.message;
+          }
         }
-      } else {
-        const data = await response.json();
-        setOutput(data.data as string);
-        setStats(data.stats as Stats);
+        setError(errorMessage);
+      } else if (data) {
+        setOutput(data.data);
+        setStats(data.stats);
       }
     } catch (err) {
       setError(`Failed to process request: ${err instanceof Error ? err.message : String(err)}`);

@@ -2,6 +2,36 @@ import { Elysia, t } from 'elysia';
 import { swagger } from '@elysiajs/swagger';
 import { extractOpenAPI } from './backend/extractor';
 import type { ExtractorConfig, SpecStats } from './backend/types';
+import { resolve } from 'node:dns/promises';
+
+// Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
+const isPrivateIP = (ip: string) => {
+  // IPv6 loopback and private ranges
+  if (ip === '::1' || ip.startsWith('fc00:') || ip.startsWith('fd00:')) {
+    return true;
+  }
+  
+  // Check for IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return false; // Not a valid IPv4 address
+
+  const [p1, p2, p3, p4] = parts;
+  if (p1 === undefined || p2 === undefined || p3 === undefined || p4 === undefined) {
+    return false; // Should not happen due to the length check, but satisfies TS
+  }
+
+  return (
+    p1 === 10 || // 10.0.0.0/8
+    (p1 === 172 && p2 >= 16 && p2 <= 31) || // 172.16.0.0/12
+    (p1 === 192 && p2 === 168) || // 192.168.0.0/16
+    p1 === 127 || // 127.0.0.0/8
+    (p1 === 169 && p2 === 254) // 169.254.0.0/16 (APIPA)
+  );
+};
 
 const app = new Elysia()
   .use(swagger())
@@ -10,11 +40,28 @@ const app = new Elysia()
       set.status = 400;
       return { error: 'URL parameter is required' };
     }
+
     try {
-      new URL(url); // Validate URL
-    } catch {
+      const urlObj = new URL(url);
+      if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        set.status = 400;
+        return { error: 'URL parameter must use http or https protocol' };
+      }
+
+      // SSRF Protection: Resolve hostname to IP and check against private ranges
+      const addresses = await resolve(urlObj.hostname);
+      if (!addresses || addresses.length === 0) {
+        set.status = 400;
+        return { error: 'Could not resolve hostname.' };
+      }
+      if (addresses.some(isPrivateIP)) {
+        set.status = 403;
+        return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+      }
+    } catch (e) {
       set.status = 400;
-      return { error: 'Invalid URL provided' };
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: `Invalid URL provided: ${message}` };
     }
 
     try {
@@ -41,6 +88,7 @@ const app = new Elysia()
     response: {
       200: t.Object({ content: t.String() }),
       400: t.Object({ error: t.String() }),
+      403: t.Object({ error: t.String() }),
       500: t.Object({ error: t.String() })
     }
   })

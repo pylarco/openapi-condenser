@@ -1,245 +1,500 @@
-Of course! I'd be happy to help you make these improvements to get your project closer to production-ready. These changes will add statistics, improve the user experience on the frontend, and add a helpful API documentation endpoint.
+An analysis of your "OpenAPI Condenser" codebase reveals several areas for improvement to enhance its functionality, security, and developer experience, moving it closer to a production-ready state. The key issues identified are the lack of a crucial "condensing" feature (removing unused schemas), a significant security vulnerability (SSRF), and an incomplete integration of `eden-treaty` for end-to-end type safety in the frontend.
 
-Here are the code modifications for each file:
+Here are the code changes to address these points:
 
-```typescript
-// src/backend/extractor.ts
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
-import { fetchSpec } from './utils/fetcher';
-import { transformOpenAPI } from './transformer';
-import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
+### 1. Implement True Condensing by Removing Unused Components
 
-const calculateStats = (spec: any): SpecStats => {
-  if (!spec || typeof spec !== 'object') {
-    return { paths: 0, operations: 0, schemas: 0 };
+The core purpose of a "condenser" is to shrink the specification. After filtering paths and operations, the definitions in `components` (like schemas, parameters, etc.) that are no longer referenced should be removed. The following changes introduce this logic.
+
+```typescript // src/backend/transformer.ts
+import type { FilterOptions, TransformOptions, SchemaTransformer, FilterPatterns } from './types';
+import micromatch from 'micromatch';
+
+/**
+ * Checks if an endpoint's tags match the provided patterns.
+ */
+function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): boolean {
+  const { include, exclude } = tagPatterns;
+
+  if (!include?.length && !exclude?.length) {
+    return true; // No tag filter, always matches
   }
-  const paths = Object.keys(spec.paths || {});
-  const operations = paths.reduce((count, path) => {
-    if (spec.paths[path] && typeof spec.paths[path] === 'object') {
-      return count + Object.keys(spec.paths[path]).length;
-    }
-    return count;
-  }, 0);
-  const schemas = Object.keys(spec.components?.schemas || {});
+  
+  // If endpoint has no tags, it cannot match an include filter.
+  if (!endpointTags.length) {
+    return !include?.length;
+  }
+  
+  const matchesInclude = include?.length ? micromatch.some(endpointTags, include) : true;
+  const matchesExclude = exclude?.length ? micromatch.some(endpointTags, exclude) : false;
 
-  return {
-    paths: paths.length,
-    operations: operations,
-    schemas: schemas.length,
-  };
+  return matchesInclude && !matchesExclude;
+}
+
+
+/**
+ * Filter paths based on configuration
+ */
+export const filterPaths = (
+  paths: Record<string, any>, 
+  filterOptions: FilterOptions
+): Record<string, any> => {
+  if (!filterOptions) return paths;
+  
+  const pathKeys = Object.keys(paths);
+  let filteredPathKeys = pathKeys;
+
+  if (filterOptions.paths?.include?.length) {
+    filteredPathKeys = micromatch(filteredPathKeys, filterOptions.paths.include, { dot: true });
+  }
+  if (filterOptions.paths?.exclude?.length) {
+    filteredPathKeys = micromatch.not(filteredPathKeys, filterOptions.paths.exclude, { dot: true });
+  }
+
+  return filteredPathKeys.reduce((acc, path) => {
+    const methods = paths[path];
+    const filteredMethods = filterMethods(methods, filterOptions);
+    
+    if (Object.keys(filteredMethods).length > 0) {
+      acc[path] = filteredMethods;
+    }
+    
+    return acc;
+  }, {} as Record<string, any>);
 };
 
 /**
- * Extract OpenAPI information based on configuration
+ * Filter HTTP methods based on configuration
  */
-export const extractOpenAPI = async (
-  config: ExtractorConfig
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source);
-    
-    if (!result.success) {
-      return result;
+export const filterMethods = (
+  methods: Record<string, any>,
+  filterOptions: FilterOptions
+): Record<string, any> => {
+  return Object.entries(methods).reduce((acc, [method, definition]) => {
+    // Skip if method is not in the filter list
+    if (filterOptions.methods && !filterOptions.methods.includes(method as any)) {
+      return acc;
     }
     
-    const beforeStats = calculateStats(result.data);
+    // Skip deprecated endpoints if configured
+    if (!filterOptions.includeDeprecated && definition.deprecated) {
+      return acc;
+    }
+    
+    // Filter by tags
+    if (filterOptions.tags && !matchesTags(definition.tags, filterOptions.tags)) {
+      return acc;
+    }
+    
+    acc[method] = definition;
+    return acc;
+  }, {} as Record<string, any>);
+};
 
-    // Apply transformations
-    const transformed = transformOpenAPI(
-      result.data,
-      config.filter,
-      config.transform
-    );
-    
-    const afterStats = calculateStats(transformed);
-    
-    // Format output
-    const formatter = getFormatter(config.output.format);
-    const formattedOutput = formatter.format(transformed);
-    
-    // Write output to file if destination is provided
-    if (config.output.destination) {
-      const outputPath = config.output.destination;
-      await fs.mkdir(dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
+/**
+ * Recursively find all $ref values in a given object.
+ */
+const findRefsRecursive = (obj: any, refs: Set<string>): void => {
+  if (!obj || typeof obj !== 'object') {
+    return;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      findRefsRecursive(item, refs);
     }
-    
-    return {
-      success: true,
-      data: formattedOutput,
-      stats: {
-        before: beforeStats,
-        after: afterStats,
+    return;
+  }
+  for (const key in obj) {
+    if (key === '$ref' && typeof obj[key] === 'string') {
+      refs.add(obj[key]);
+    } else {
+      findRefsRecursive(obj[key], refs);
+    }
+  }
+};
+
+/**
+ * Parses a component reference string.
+ */
+const getComponentNameFromRef = (ref: string): { type: string; name: string } | null => {
+  const prefix = '#/components/';
+  if (!ref.startsWith(prefix)) {
+    return null;
+  }
+  const parts = ref.substring(prefix.length).split('/');
+  if (parts.length !== 2) {
+    return null;
+  }
+  return { type: parts[0], name: parts[1] };
+};
+
+/**
+ * Removes all components (schemas, parameters, etc.) that are not referenced
+ * in the remaining parts of the specification.
+ */
+const removeUnusedComponents = (spec: any): any => {
+  if (!spec.components) return spec;
+
+  // 1. Find all initial references from outside the components section
+  const initialRefs = new Set<string>();
+  findRefsRecursive(spec.paths, initialRefs);
+  findRefsRecursive(spec.tags, initialRefs);
+  findRefsRecursive(spec.security, initialRefs);
+  findRefsRecursive(spec.info, initialRefs);
+  findRefsRecursive(spec.servers, initialRefs);
+  if (spec.webhooks) findRefsRecursive(spec.webhooks, initialRefs);
+
+  // 2. Transitively discover all dependencies within components
+  const allRefs = new Set<string>(initialRefs);
+  let lastSize = -1;
+  while (allRefs.size > lastSize) {
+    lastSize = allRefs.size;
+    allRefs.forEach(ref => {
+      const componentInfo = getComponentNameFromRef(ref);
+      if (componentInfo && spec.components[componentInfo.type]?.[componentInfo.name]) {
+        const component = spec.components[componentInfo.type][componentInfo.name];
+        findRefsRecursive(component, allRefs);
       }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
-    };
+    });
   }
+
+  // 3. Build a new components object with only the referenced items
+  const newComponents: Record<string, any> = {};
+  for (const componentType in spec.components) {
+    const newComponentGroup: Record<string, any> = {};
+    const componentGroup = spec.components[componentType];
+    for (const componentName in componentGroup) {
+      const ref = `#/components/${componentType}/${componentName}`;
+      if (allRefs.has(ref)) {
+        newComponentGroup[componentName] = componentGroup[componentName];
+      }
+    }
+    if (Object.keys(newComponentGroup).length > 0) {
+      newComponents[componentType] = newComponentGroup;
+    }
+  }
+
+  // 4. Replace the old components object
+  if (Object.keys(newComponents).length > 0) {
+    spec.components = newComponents;
+  } else {
+    delete spec.components;
+  }
+
+  return spec;
 };
 
 /**
- * Load configuration from file
+ * Transform OpenAPI schema based on configuration
  */
-export const loadConfig = async (
-  configPath: string = './openapi-condenser.config.ts'
-): Promise<ExtractorConfig> => {
-  try {
-    // Convert file path to URL for import()
-    const fileUrl = `file://${join(process.cwd(), configPath)}`;
-    
-    // Import configuration
-    const module = await import(fileUrl);
-    return module.default as ExtractorConfig;
-  } catch (error) {
-    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
+export const transformSchema = (
+  schema: any,
+  transformOptions: TransformOptions,
+  currentDepth = 0
+): any => {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
   }
+  
+  // Handle maximum depth
+  if (transformOptions.maxDepth !== undefined && currentDepth >= transformOptions.maxDepth) {
+    if (Array.isArray(schema)) {
+      return schema.length > 0 ? ['...'] : [];
+    }
+    return { truncated: true, reason: `Max depth of ${transformOptions.maxDepth} reached` };
+  }
+  
+  // Handle arrays
+  if (Array.isArray(schema)) {
+    return schema.map(item => transformSchema(item, transformOptions, currentDepth + 1));
+  }
+  
+  // Handle objects
+  const result = { ...schema };
+  
+  // Remove examples if configured
+  if (transformOptions.removeExamples && 'example' in result) {
+    delete result.example;
+  }
+  if (transformOptions.removeExamples && 'examples' in result) {
+    delete result.examples;
+  }
+  
+  // Remove descriptions if configured
+  if (transformOptions.removeDescriptions && 'description' in result) {
+    delete result.description;
+  }
+  
+  // Process all properties recursively
+  Object.keys(result).forEach(key => {
+    if (typeof result[key] === 'object' && result[key] !== null) {
+      result[key] = transformSchema(result[key], transformOptions, currentDepth + 1);
+    }
+  });
+  
+  return result;
 };
 
 /**
- * Merge command line arguments with configuration
+ * Transform the entire OpenAPI document based on configuration
  */
-export const mergeWithCommandLineArgs = (
-  config: ExtractorConfig,
-  args: Record<string, any>
-): ExtractorConfig => {
-  // Deep copy to avoid mutating the original config object
-  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
+export const transformOpenAPI = (
+  openapi: any,
+  filterOpts?: FilterOptions,
+  transformOpts?: TransformOptions
+): any => {
+  // Create a deep copy to avoid mutating the original object
+  let result = JSON.parse(JSON.stringify(openapi));
   
-  // Override source settings
-  if (args.source) {
-    result.source.path = args.source;
-  }
-  
-  if (args.sourceType) {
-    result.source.type = args.sourceType as 'local' | 'remote';
+  // Filter paths first
+  if (result.paths && filterOpts) {
+    result.paths = filterPaths(result.paths, filterOpts);
   }
   
-  // Override output settings
-  if (args.format) {
-    result.output.format = args.format;
-  }
+  // After filtering, remove components that are no longer referenced.
+  result = removeUnusedComponents(result);
   
-  if (args.outputPath) {
-    result.output.destination = args.outputPath;
-  }
-  
-  // Initialize filter if it doesn't exist
-  if (!result.filter) {
-    result.filter = {};
-  }
-  
-  // Override filter settings
-  if (args.includePaths) {
-    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
-  }
-  if (args.excludePaths) {
-    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
-  }
-  
-  if (args.includeTags) {
-    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
-  }
-  if (args.excludeTags) {
-    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
-  }
-  
-  if (args.methods) {
-    result.filter.methods = args.methods.split(',');
-  }
-  
-  if (args.includeDeprecated) {
-    result.filter.includeDeprecated = args.includeDeprecated;
+  // Then apply transformations on the filtered spec
+  if (transformOpts) {
+    if (!transformOpts.includeServers) {
+      delete result.servers;
+    }
+    if (!transformOpts.includeInfo) {
+      delete result.info;
+    }
+    // Apply recursive transformations to the entire document
+    result = transformSchema(result, transformOpts);
   }
   
   return result;
 };
+
+/**
+ * Higher-order function for composing transformers
+ */
+export const composeTransformers = 
+  (...transformers: SchemaTransformer[]): SchemaTransformer => 
+  (schema: any) => 
+    transformers.reduce((result, transformer) => transformer(result), schema);
 ```
 
-```typescript
-// src/backend/types.ts
-export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
+### 2. Patch Server-Side Request Forgery (SSRF) Vulnerability
 
-export type FilterPatterns = {
-  include?: string[];
-  exclude?: string[];
+The `/api/fetch-spec` endpoint could be tricked into making requests to internal network services. The following change adds a security check to prevent this by resolving the requested URL's hostname and ensuring it does not point to a private or local IP address.
+
+```typescript // src/server.ts
+import { Elysia, t } from 'elysia';
+import { swagger } from '@elysiajs/swagger';
+import { extractOpenAPI } from './backend/extractor';
+import type { ExtractorConfig, SpecStats } from './backend/types';
+import { resolve } from 'node:dns/promises';
+
+// Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
+const isPrivateIP = (ip: string) => {
+  // IPv6 loopback and private ranges
+  if (ip === '::1' || ip.startsWith('fc00:') || ip.startsWith('fd00:')) {
+    return true;
+  }
+  
+  // Check for IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) return false; // Not a valid IPv4 address
+
+  return (
+    parts[0] === 10 || // 10.0.0.0/8
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12
+    (parts[0] === 192 && parts[1] === 168) || // 192.168.0.0/16
+    parts[0] === 127 || // 127.0.0.0/8
+    (parts[0] === 169 && parts[1] === 254) // 169.254.0.0/16 (APIPA)
+  );
 };
 
-export type FilterOptions = {
-  paths?: FilterPatterns;
-  tags?: FilterPatterns;
-  methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
-  includeDeprecated?: boolean;
-};
-
-export type TransformOptions = {
-  maxDepth?: number;
-  removeExamples?: boolean;
-  removeDescriptions?: boolean;
-  includeServers?: boolean;
-  includeInfo?: boolean;
-};
-
-export type Source =
-  | {
-      type: 'local' | 'remote';
-      path: string;
-      content?: undefined;
+const app = new Elysia()
+  .use(swagger())
+  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+    if (!url) {
+      set.status = 400;
+      return { error: 'URL parameter is required' };
     }
-  | {
-      type: 'memory';
-      path: string; // for determining parser, e.g., 'spec.json'
-      content: string;
-    };
 
-export type ExtractorConfig = {
-  source: Source;
-  output: {
-    format: OutputFormat;
-    destination?: string;
-  };
-  filter?: FilterOptions;
-  transform?: TransformOptions;
-  validation?: {
-    strict: boolean;
-    ignoreErrors?: string[];
-  };
-};
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        set.status = 400;
+        return { error: 'URL parameter must use http or https protocol' };
+      }
 
-export type SpecStats = {
-  paths: number;
-  operations: number;
-  schemas: number;
-};
+      // SSRF Protection: Resolve hostname to IP and check against private ranges
+      const addresses = await resolve(urlObj.hostname);
+      if (!addresses || addresses.length === 0) {
+        set.status = 400;
+        return { error: 'Could not resolve hostname.' };
+      }
+      if (addresses.some(isPrivateIP)) {
+        set.status = 403;
+        return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+      }
+    } catch (e) {
+      set.status = 400;
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: `Invalid URL provided: ${message}` };
+    }
 
-export type OpenAPIExtractorResult = {
-  success: boolean;
-  data?: any;
-  stats?: {
-    before: SpecStats;
-    after: SpecStats;
-  };
-  warnings?: string[];
-  errors?: string[];
-};
+    try {
+      const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
+      if (!response.ok) {
+        const errorText = await response.text();
+        set.status = response.status;
+        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. ${errorText}` };
+      }
+      const content = await response.text();
+      return { content };
+    } catch (e) {
+      set.status = 500;
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: `Failed to fetch spec from URL: ${message}` };
+    }
+  }, {
+    query: t.Object({
+      url: t.String({
+        format: 'uri',
+        description: 'A public URL to an OpenAPI specification file.'
+      })
+    }),
+    response: {
+      200: t.Object({ content: t.String() }),
+      400: t.Object({ error: t.String() }),
+      403: t.Object({ error: t.String() }),
+      500: t.Object({ error: t.String() })
+    }
+  })
+  .post(
+    '/api/condense',
+    async ({ body, set }) => {
+      const config: ExtractorConfig = {
+        source: {
+          type: 'memory',
+          content: body.source.content,
+          path: body.source.path,
+        },
+        output: {
+          format: body.output.format,
+        },
+        filter: body.filter,
+        transform: body.transform,
+      };
 
-export type SchemaTransformer = (schema: any) => any;
+      const result = await extractOpenAPI(config);
+
+      if (!result.success) {
+        set.status = 400;
+        return {
+          success: false,
+          errors: result.errors || ['Unknown error occurred'],
+          warnings: result.warnings
+        };
+      }
+
+      // Ensure we have stats with the expected structure
+      const defaultStats: SpecStats = { paths: 0, operations: 0, schemas: 0 };
+      const stats = result.stats || { before: defaultStats, after: defaultStats };
+
+      return {
+        success: true as const,
+        data: result.data as string,
+        stats: {
+          before: stats.before || defaultStats,
+          after: stats.after || defaultStats
+        },
+        warnings: result.warnings
+      };
+    },
+    {
+      body: t.Object({
+        source: t.Object({
+          content: t.String(),
+          path: t.String(),
+        }),
+        output: t.Object({
+          format: t.Union([
+            t.Literal('json'),
+            t.Literal('yaml'),
+            t.Literal('xml'),
+            t.Literal('markdown'),
+          ]),
+        }),
+        filter: t.Optional(
+          t.Object({
+            paths: t.Optional(t.Object({
+              include: t.Optional(t.Array(t.String())),
+              exclude: t.Optional(t.Array(t.String())),
+            })),
+            tags: t.Optional(t.Object({
+                include: t.Optional(t.Array(t.String())),
+                exclude: t.Optional(t.Array(t.String())),
+            })),
+            methods: t.Optional(t.Array(t.Union([
+                t.Literal('get'),
+                t.Literal('post'),
+                t.Literal('put'),
+                t.Literal('delete'),
+                t.Literal('patch'),
+                t.Literal('options'),
+                t.Literal('head'),
+            ]))),
+            includeDeprecated: t.Optional(t.Boolean()),
+          })
+        ),
+        transform: t.Optional(
+          t.Object({
+            removeExamples: t.Optional(t.Boolean()),
+            removeDescriptions: t.Optional(t.Boolean()),
+            includeServers: t.Optional(t.Boolean()),
+            includeInfo: t.Optional(t.Boolean()),
+          })
+        ),
+      }),
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          data: t.String(),
+          stats: t.Object({
+            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
+            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
+          }),
+          warnings: t.Optional(t.Array(t.String())),
+        }),
+        400: t.Object({
+          success: t.Literal(false),
+          errors: t.Optional(t.Array(t.String())),
+          warnings: t.Optional(t.Array(t.String())),
+        })
+      }
+    }
+  )
+  .listen(3000);
+
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+
+export type App = typeof app;
 ```
 
-```typescript
-// src/frontend/App.tsx
+### 3. Implement `eden-treaty` for True E2E Type Safety
+
+Your frontend included `eden-treaty` but was making raw `fetch` calls, missing out on its primary benefit. The following changes refactor the API calls in the frontend to use the typed Eden client, ensuring the requests and responses are type-safe from the server to the client.
+
+```typescript // src/frontend/App.tsx
 import { useState, useCallback } from 'react';
-import { client } from './client';
-import type { ExtractorConfig, FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
+import type { FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
 import { ConfigPanel } from './components/ConfigPanel';
 import { InputPanel } from './components/InputPanel';
 import { OutputPanel } from './components/OutputPanel';
 import { StatsPanel } from './components/StatsPanel';
+import { client } from './client';
 
 const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
   filter: {
@@ -285,6 +540,7 @@ export default function App() {
       source: {
         content: specContent,
         path: fileName,
+        type: 'memory' as const
       },
       output: {
         format: outputFormat,
@@ -293,19 +549,19 @@ export default function App() {
       transform: config.transform,
     };
 
-    const { data, error: apiError } = await client.api.condense.post(payload);
-
-    if (apiError) {
-      const errorPayload = apiError.value as any;
-      if (errorPayload && errorPayload.errors) {
-        setError(errorPayload.errors.join('\n'));
-      } else {
-        setError(String(errorPayload.error || apiError.value) || 'An unknown error occurred.');
+    try {
+      const { data, error } = await client.api.condense.post(payload);
+      
+      if (error) {
+        setError(error.value.errors?.join('\n') || 'An unknown error occurred');
+      } else if (data) {
+        setOutput(data.data);
+        setStats(data.stats);
       }
-    } else if (data) {
-      setOutput(data.data as string);
-      setStats(data.stats as Stats);
+    } catch (err) {
+      setError(`Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
     }
+
     setIsLoading(false);
   }, [specContent, fileName, config, outputFormat]);
   
@@ -359,168 +615,7 @@ export default function App() {
 }
 ```
 
-```typescript
-// src/frontend/components/ConfigPanel.tsx
-import React from 'react';
-import type { FilterOptions, TransformOptions, OutputFormat } from '../../backend/types';
-
-interface ConfigPanelProps {
-  config: { filter: FilterOptions; transform: TransformOptions };
-  setConfig: React.Dispatch<React.SetStateAction<{ filter: FilterOptions; transform: TransformOptions }>>;
-  outputFormat: OutputFormat;
-  setOutputFormat: (format: OutputFormat) => void;
-  onCondense: () => void;
-  isLoading: boolean;
-}
-
-const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
-    <div className="relative flex items-center group">
-      {children}
-      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
-        {text}
-      </div>
-    </div>
-  );
-
-const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
-  <div className="mb-6">
-    <h3 className="text-lg font-semibold text-white mb-3">{title}</h3>
-    <div className="space-y-4">{children}</div>
-  </div>
-);
-
-const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = ({ label, checked, onChange, tooltip }) => (
-    <label className="flex items-center justify-between cursor-pointer">
-        <span className="text-sm text-slate-300 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </span>
-      <div className="relative">
-        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <div className={`block w-10 h-6 rounded-full transition ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
-        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${checked ? 'transform translate-x-4' : ''}`}></div>
-      </div>
-    </label>
-);
-
-const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = ({ label, value, onChange, placeholder, tooltip }) => (
-    <div>
-        <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </label>
-        <input 
-            type="text"
-            placeholder={placeholder}
-            value={value?.join(', ')}
-            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()) : [])}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-        />
-    </div>
-);
-
-
-export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, outputFormat, setOutputFormat, onCondense, isLoading }) => {
-  const handleFilterChange = (key: keyof FilterOptions, value: any) => {
-    setConfig(c => ({ ...c, filter: { ...c.filter, [key]: value } }));
-  };
-
-  const handleTransformChange = (key: keyof TransformOptions, value: any) => {
-    setConfig(c => ({ ...c, transform: { ...c.transform, [key]: value } }));
-  };
-  
-  return (
-    <div className="sticky top-24 p-6 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg">
-      <Section title="Output Format">
-        <select 
-            value={outputFormat}
-            onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-        >
-            <option value="markdown">Markdown</option>
-            <option value="json">JSON</option>
-            <option value="yaml">YAML</option>
-            <option value="xml">XML</option>
-        </select>
-      </Section>
-
-      <Section title="Filtering">
-        <TextInput 
-            label="Include Paths (glob)" 
-            placeholder="/users/**, /posts/*"
-            value={config.filter.paths?.include}
-            onChange={v => handleFilterChange('paths', { ...config.filter.paths, include: v })}
-            tooltip="Comma-separated list of glob patterns to include paths. e.g., /users/**"
-        />
-        <TextInput 
-            label="Exclude Paths (glob)" 
-            placeholder="/internal/**"
-            value={config.filter.paths?.exclude}
-            onChange={v => handleFilterChange('paths', { ...config.filter.paths, exclude: v })}
-            tooltip="Comma-separated list of glob patterns to exclude paths. e.g., /admin/**"
-        />
-        <Switch 
-            label="Include Deprecated"
-            checked={!!config.filter.includeDeprecated}
-            onChange={v => handleFilterChange('includeDeprecated', v)}
-            tooltip="If checked, endpoints marked as 'deprecated' will be included."
-        />
-      </Section>
-
-      <Section title="Transformation">
-        <Switch 
-            label="Remove Examples"
-            checked={!!config.transform.removeExamples}
-            onChange={v => handleTransformChange('removeExamples', v)}
-            tooltip="If checked, all 'example' and 'examples' fields will be removed."
-        />
-        <Switch 
-            label="Remove Descriptions"
-            checked={!!config.transform.removeDescriptions}
-            onChange={v => handleTransformChange('removeDescriptions', v)}
-            tooltip="If checked, all 'description' fields will be removed."
-        />
-        <Switch 
-            label="Include Servers"
-            checked={!!config.transform.includeServers}
-            onChange={v => handleTransformChange('includeServers', v)}
-            tooltip="If checked, the 'servers' block will be included."
-        />
-        <Switch 
-            label="Include Info"
-            checked={!!config.transform.includeInfo}
-            onChange={v => handleTransformChange('includeInfo', v)}
-            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
-        />
-      </Section>
-      
-      <button 
-        onClick={onCondense}
-        disabled={isLoading}
-        className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
-      >
-        {isLoading ? (
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        ) : 'Condense'}
-      </button>
-    </div>
-  );
-};
-```
-
-```typescript
-// src/frontend/components/InputPanel.tsx
+```typescript // src/frontend/components/InputPanel.tsx
 import React, { useState, useCallback, useRef } from 'react';
 import { client } from '../client';
 
@@ -566,21 +661,25 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
     setIsFetching(true);
     setFetchError(null);
     setUploadedFileName(null);
+    
+    try {
+      const { data, error } = await client.api['fetch-spec'].get({ query: { url } });
 
-    const { data, error } = await client.api['fetch-spec'].get({ query: { url } });
-
-    if (error) {
-      const errorPayload = error.value as any;
-      setFetchError(errorPayload.error || 'Failed to fetch the spec.');
-    } else if (data) {
-      setSpecContent(data.content);
-      try {
-        const urlObject = new URL(url);
-        setFileName(urlObject.pathname.split('/').pop() || 'spec.json');
-      } catch {
-        setFileName('spec.from.url');
+      if (error) {
+        setFetchError(error.value.error || 'Failed to fetch the spec.');
+      } else if (data) {
+        setSpecContent(data.content);
+        try {
+          const urlObject = new URL(url);
+          setFileName(urlObject.pathname.split('/').pop() || 'spec.json');
+        } catch {
+          setFileName('spec.from.url');
+        }
       }
+    } catch (err) {
+      setFetchError(`Failed to fetch: ${err instanceof Error ? err.message : String(err)}`);
     }
+    
     setIsFetching(false);
   }, [url, setSpecContent, setFileName]);
 
@@ -653,307 +752,155 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
 };
 ```
 
-```typescript
-// src/frontend/components/OutputPanel.tsx
-import React, { useState, useEffect } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { OutputFormat } from '../../backend/types';
+### 4. Improve CLI Quality of Life
 
-interface OutputPanelProps {
-  output: string;
-  isLoading: boolean;
-  error: string | null;
-  format: OutputFormat;
-}
+A minor change in the CLI improves robustness by properly validating the output format argument.
 
-const languageMap: Record<OutputFormat, string> = {
-  json: 'json',
-  yaml: 'yaml',
-  xml: 'xml',
-  markdown: 'markdown',
-};
+```typescript // src/cli.ts
+#!/usr/bin/env bun
+import { parse } from 'cmd-ts';
+import { command, option, string, optional, flag } from 'cmd-ts';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './backend/extractor';
+import type { ExtractorConfig, OutputFormat } from './backend/types';
 
-const SkeletonLoader = () => (
-    <div className="absolute inset-0 p-4 space-y-3 animate-pulse">
-        <div className="h-4 bg-slate-700/50 rounded w-1/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/3"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-2/5"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
-    </div>
-);
+const validFormats: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
 
-
-export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, error, format }) => {
-  const [copyStatus, setCopyStatus] = useState('Copy');
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  
-  useEffect(() => {
-    if (copyStatus === 'Copied!') {
-      const timer = setTimeout(() => setCopyStatus('Copy'), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copyStatus]);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(output);
-    setCopyStatus('Copied!');
-  };
-
-  const handleDownload = () => {
-    const blob = new Blob([output], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `condensed-spec.${format === 'markdown' ? 'md' : format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-  
-  const panelClasses = isFullScreen 
-    ? "fixed inset-0 z-50 bg-slate-800 flex flex-col"
-    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
-
-  return (
-    <div className={panelClasses}>
-      <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
-        <div className="flex items-center gap-2">
-            <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
-                {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            </button>
-            {output && !isLoading && (
-            <>
-                <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">{copyStatus}</button>
-                <button onClick={handleDownload} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">Download</button>
-            </>
-            )}
-        </div>
-      </div>
-      <div className="flex-grow p-1 relative overflow-auto">
-        {isLoading && <SkeletonLoader />}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
-                <p className="font-bold mb-2">An error occurred:</p>
-                <pre className="whitespace-pre-wrap">{error}</pre>
-            </div>
-          </div>
-        )}
-        {!isLoading && !error && output && (
-            <SyntaxHighlighter language={languageMap[format]} style={vscDarkPlus} customStyle={{ background: 'transparent', margin: 0, padding: '1rem', height: isFullScreen ? '100%' : 'auto', minHeight: '100%' }} codeTagProps={{style:{fontFamily: 'monospace'}}} wrapLines={true} showLineNumbers>
-                {output}
-            </SyntaxHighlighter>
-        )}
-        {!isLoading && !error && !output && (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-                <p>Your condensed OpenAPI spec will appear here.</p>
-            </div>
-        )}
-      </div>
-    </div>
-  );
-};
-```
-
-```typescript
-// src/frontend/components/StatsPanel.tsx
-import React from 'react';
-import type { SpecStats } from '../../backend/types';
-
-interface StatsPanelProps {
-  stats: {
-    before: SpecStats;
-    after: SpecStats;
-  } | null;
-}
-
-const StatItem: React.FC<{ label: string; before: number; after: number }> = ({ label, before, after }) => {
-  const reduction = before > 0 ? ((before - after) / before) * 100 : 0;
-  const reductionColor = reduction > 0 ? 'text-green-400' : 'text-slate-400';
-  const change = after - before;
-
-  return (
-    <div className="flex justify-between items-center py-2">
-      <span className="text-slate-300">{label}</span>
-      <div className="flex items-center gap-4">
-        <span className="text-slate-400">{before}</span>
-        <span className="text-xl font-bold text-white tabular-nums">{after}</span>
-        <span className={`text-sm font-medium w-24 text-right ${reductionColor}`}>
-          {change !== 0 ? `${change > 0 ? '+' : ''}${change}` : ''} ({reduction.toFixed(0)}%)
-        </span>
-      </div>
-    </div>
-  );
-};
-
-export const StatsPanel: React.FC<StatsPanelProps> = ({ stats }) => {
-  if (!stats) return null;
-
-  return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Condensation Stats</h3>
-      <div className="flex justify-between items-center text-xs text-slate-400 font-medium mb-2 px-2">
-        <span>Metric</span>
-        <div className="flex items-center gap-4 w-[240px] justify-between">
-          <span className='w-8 text-center'>Before</span>
-          <span className='w-8 text-center'>After</span>
-          <span className="w-24 text-right">Change / Reduction</span>
-        </div>
-      </div>
-      <div className="divide-y divide-slate-700/50">
-        <StatItem label="Paths" before={stats.before.paths} after={stats.after.paths} />
-        <StatItem label="Operations" before={stats.before.operations} after={stats.after.operations} />
-        <StatItem label="Schemas" before={stats.before.schemas} after={stats.after.schemas} />
-      </div>
-    </div>
-  );
-};
-```
-
-```typescript
-// src/server.ts
-import { Elysia, t } from 'elysia';
-import { swagger } from '@elysiajs/swagger';
-import { extractOpenAPI } from './backend/extractor';
-import type { ExtractorConfig } from './backend/types';
-
-const app = new Elysia()
-  .use(swagger())
-  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
-    if (!url) {
-      set.status = 400;
-      return { error: 'URL parameter is required' };
-    }
-    try {
-      new URL(url); // Validate URL
-    } catch {
-      set.status = 400;
-      return { error: 'Invalid URL provided' };
-    }
-
-    try {
-      const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
-      if (!response.ok) {
-        const errorText = await response.text();
-        set.status = response.status;
-        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. ${errorText}` };
-      }
-      const content = await response.text();
-      return { content };
-    } catch (e) {
-      set.status = 500;
-      const message = e instanceof Error ? e.message : String(e);
-      return { error: `Failed to fetch spec from URL: ${message}` };
-    }
-  }, {
-    query: t.Object({
-      url: t.String({
-        format: 'uri',
-        description: 'A public URL to an OpenAPI specification file.'
-      })
+// Define CLI command
+const cmd = command({
+  name: 'openapi-condenser',
+  description: 'Extract and transform OpenAPI specifications',
+  args: {
+    config: option({
+      type: optional(string),
+      long: 'config',
+      short: 'c',
+      description: 'Path to configuration file',
     }),
-    response: {
-      200: t.Object({ content: t.String() }),
-      400: t.Object({ error: t.String() }),
-      500: t.Object({ error: t.String() })
-    }
-  })
-  .post(
-    '/api/condense',
-    async ({ body, set }) => {
-      const config: ExtractorConfig = {
-        source: {
-          type: 'memory',
-          content: body.source.content,
-          path: body.source.path,
-        },
-        output: {
-          format: body.output.format,
-        },
-        filter: body.filter,
-        transform: body.transform,
-      };
-
-      const result = await extractOpenAPI(config);
-
+    source: option({
+      type: optional(string),
+      long: 'source',
+      short: 's',
+      description: 'Source file path or URL',
+    }),
+    sourceType: option({
+      type: optional(string),
+      long: 'source-type',
+      description: 'Source type (local or remote)',
+    }),
+    format: option({
+      type: optional(string),
+      long: 'format',
+      short: 'f',
+      description: `Output format (${validFormats.join(', ')})`,
+    }),
+    outputPath: option({
+      type: optional(string),
+      long: 'output',
+      short: 'o',
+      description: 'Output file path',
+    }),
+    includePaths: option({
+      type: optional(string),
+      long: 'include-paths',
+      description: 'Include paths by glob patterns (comma-separated)',
+    }),
+    excludePaths: option({
+      type: optional(string),
+      long: 'exclude-paths',
+      description: 'Exclude paths by glob patterns (comma-separated)',
+    }),
+    includeTags: option({
+      type: optional(string),
+      long: 'include-tags',
+      description: 'Include endpoints by tag glob patterns (comma-separated)',
+    }),
+    excludeTags: option({
+      type: optional(string),
+      long: 'exclude-tags',
+      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
+    }),
+    methods: option({
+      type: optional(string),
+      long: 'methods',
+      description: 'Filter by HTTP methods (comma-separated)',
+    }),
+    includeDeprecated: flag({
+      long: 'include-deprecated',
+      description: 'Include deprecated endpoints',
+    }),
+    verbose: flag({
+      long: 'verbose',
+      short: 'v',
+      description: 'Show verbose output',
+    }),
+  },
+  handler: async (args) => {
+    try {
+      // Load configuration
+      const configPath = args.config || './openapi-condenser.config.ts';
+      let config: ExtractorConfig;
+      
+      try {
+        config = await loadConfig(configPath);
+      } catch (error) {
+        if (args.source) {
+          const format = args.format || 'json';
+          if (!validFormats.includes(format as OutputFormat)) {
+            console.error(`Error: Invalid format '${format}'. Must be one of ${validFormats.join(', ')}.`);
+            process.exit(1);
+          }
+          // Create minimal config if no config file but source is provided
+          config = {
+            source: {
+              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
+              path: args.source
+            },
+            output: {
+              format: format as OutputFormat,
+            },
+          };
+        } else {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
+      }
+      
+      // Merge command line args with config
+      const mergedConfig = mergeWithCommandLineArgs(config, args);
+      
+      if (args.verbose) {
+        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
+      }
+      
+      // Run extraction
+      const result = await extractOpenAPI(mergedConfig);
+      
       if (!result.success) {
-        set.status = 400;
-        return result;
+        if (result.errors) {
+          console.error('Errors:', result.errors.join('\n'));
+        }
+        process.exit(1);
       }
-
-      return result;
-    },
-    {
-      body: t.Object({
-        source: t.Object({
-          content: t.String(),
-          path: t.String(),
-        }),
-        output: t.Object({
-          format: t.Union([
-            t.Literal('json'),
-            t.Literal('yaml'),
-            t.Literal('xml'),
-            t.Literal('markdown'),
-          ]),
-        }),
-        filter: t.Optional(
-          t.Object({
-            paths: t.Optional(t.Object({
-              include: t.Optional(t.Array(t.String())),
-              exclude: t.Optional(t.Array(t.String())),
-            })),
-            tags: t.Optional(t.Object({
-                include: t.Optional(t.Array(t.String())),
-                exclude: t.Optional(t.Array(t.String())),
-            })),
-            methods: t.Optional(t.Array(t.Union([
-                t.Literal('get'),
-                t.Literal('post'),
-                t.Literal('put'),
-                t.Literal('delete'),
-                t.Literal('patch'),
-                t.Literal('options'),
-                t.Literal('head'),
-            ]))),
-            includeDeprecated: t.Optional(t.Boolean()),
-          })
-        ),
-        transform: t.Optional(
-          t.Object({
-            removeExamples: t.Optional(t.Boolean()),
-            removeDescriptions: t.Optional(t.Boolean()),
-            includeServers: t.Optional(t.Boolean()),
-            includeInfo: t.Optional(t.Boolean()),
-          })
-        ),
-      }),
-      response: {
-        200: t.Object({
-          success: t.Literal(true),
-          data: t.String(),
-          stats: t.Object({
-            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
-            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
-          }),
-          warnings: t.Optional(t.Array(t.String())),
-        }),
-        400: t.Object({
-          success: t.Literal(false),
-          errors: t.Optional(t.Array(t.String())),
-          warnings: t.Optional(t.Array(t.String())),
-        })
+      
+      if (!mergedConfig.output.destination) {
+        // Output to stdout if no destination specified
+        console.log(result.data);
+      } else if (args.verbose) {
+        console.log(`Output written to: ${mergedConfig.output.destination}`);
       }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        console.warn('Warnings:', result.warnings.join('\n'));
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
     }
-  )
-  .listen(3000);
+  },
+});
 
-console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
-
-export type App = typeof app;
+// Run the command
+await parse(cmd, process.argv.slice(2));
 ```
+
+These changes collectively make your OpenAPI Condenser more powerful, secure, and robust, aligning it with best practices and addressing the core concerns about its production-readiness.

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { client } from '../client';
 
 interface InputPanelProps {
   setSpecContent: (content: string) => void;
@@ -44,14 +45,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
     setUploadedFileName(null);
     
     try {
-      // Use direct fetch instead of client
-      const response = await fetch(`http://localhost:3000/api/fetch-spec?url=${encodeURIComponent(url)}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        setFetchError(errorData.error || 'Failed to fetch the spec.');
-      } else {
-        const data = await response.json();
+      const { data, error } = await client.api['fetch-spec'].get({ $query: { url } });
+
+      if (error) {
+        let errorMessage = 'Failed to fetch the spec.';
+        const errorValue = error.value as any;
+        if (typeof errorValue === 'object' && errorValue !== null) {
+          if ('error' in errorValue && typeof errorValue.error === 'string') {
+            errorMessage = errorValue.error;
+          } else if ('message' in errorValue && typeof errorValue.message === 'string') {
+            errorMessage = errorValue.message;
+          }
+        }
+        setFetchError(errorMessage);
+      } else if (data) {
         setSpecContent(data.content);
         try {
           const urlObject = new URL(url);

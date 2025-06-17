@@ -83,6 +83,105 @@ export const filterMethods = (
 };
 
 /**
+ * Recursively find all $ref values in a given object.
+ */
+const findRefsRecursive = (obj: any, refs: Set<string>): void => {
+  if (!obj || typeof obj !== 'object') {
+    return;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      findRefsRecursive(item, refs);
+    }
+    return;
+  }
+  for (const key in obj) {
+    if (key === '$ref' && typeof obj[key] === 'string') {
+      refs.add(obj[key]);
+    } else {
+      findRefsRecursive(obj[key], refs);
+    }
+  }
+};
+
+/**
+ * Parses a component reference string.
+ */
+const getComponentNameFromRef = (ref: string): { type: string; name: string } | null => {
+  const prefix = '#/components/';
+  if (!ref.startsWith(prefix)) {
+    return null;
+  }
+  const parts = ref.substring(prefix.length).split('/');
+  if (parts.length !== 2) {
+    return null;
+  }
+  
+  const [type, name] = parts;
+  if (!type || !name) {
+    return null;
+  }
+
+  return { type, name };
+};
+
+/**
+ * Removes all components (schemas, parameters, etc.) that are not referenced
+ * in the remaining parts of the specification.
+ */
+const removeUnusedComponents = (spec: any): any => {
+  if (!spec.components) return spec;
+
+  // 1. Find all initial references from outside the components section
+  const initialRefs = new Set<string>();
+  findRefsRecursive(spec.paths, initialRefs);
+  findRefsRecursive(spec.tags, initialRefs);
+  findRefsRecursive(spec.security, initialRefs);
+  findRefsRecursive(spec.info, initialRefs);
+  findRefsRecursive(spec.servers, initialRefs);
+  if (spec.webhooks) findRefsRecursive(spec.webhooks, initialRefs);
+
+  // 2. Transitively discover all dependencies within components
+  const allRefs = new Set<string>(initialRefs);
+  let lastSize = -1;
+  while (allRefs.size > lastSize) {
+    lastSize = allRefs.size;
+    allRefs.forEach(ref => {
+      const componentInfo = getComponentNameFromRef(ref);
+      if (componentInfo && spec.components[componentInfo.type]?.[componentInfo.name]) {
+        const component = spec.components[componentInfo.type][componentInfo.name];
+        findRefsRecursive(component, allRefs);
+      }
+    });
+  }
+
+  // 3. Build a new components object with only the referenced items
+  const newComponents: Record<string, any> = {};
+  for (const componentType in spec.components) {
+    const newComponentGroup: Record<string, any> = {};
+    const componentGroup = spec.components[componentType];
+    for (const componentName in componentGroup) {
+      const ref = `#/components/${componentType}/${componentName}`;
+      if (allRefs.has(ref)) {
+        newComponentGroup[componentName] = componentGroup[componentName];
+      }
+    }
+    if (Object.keys(newComponentGroup).length > 0) {
+      newComponents[componentType] = newComponentGroup;
+    }
+  }
+
+  // 4. Replace the old components object
+  if (Object.keys(newComponents).length > 0) {
+    spec.components = newComponents;
+  } else {
+    delete spec.components;
+  }
+
+  return spec;
+};
+
+/**
  * Transform OpenAPI schema based on configuration
  */
 export const transformSchema = (
@@ -149,6 +248,9 @@ export const transformOpenAPI = (
     result.paths = filterPaths(result.paths, filterOpts);
   }
   
+  // After filtering, remove components that are no longer referenced.
+  result = removeUnusedComponents(result);
+  
   // Then apply transformations on the filtered spec
   if (transformOpts) {
     if (!transformOpts.includeServers) {
@@ -160,8 +262,6 @@ export const transformOpenAPI = (
     // Apply recursive transformations to the entire document
     result = transformSchema(result, transformOpts);
   }
-
-  // A future improvement could be to remove unused components after path filtering.
   
   return result;
 };

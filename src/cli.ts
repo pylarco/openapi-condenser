@@ -2,7 +2,9 @@
 import { parse } from 'cmd-ts';
 import { command, option, string, optional, flag } from 'cmd-ts';
 import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './backend/extractor';
-import type { ExtractorConfig } from './backend/types';
+import type { ExtractorConfig, OutputFormat } from './backend/types';
+
+const validFormats: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
 
 // Define CLI command
 const cmd = command({
@@ -30,7 +32,7 @@ const cmd = command({
       type: optional(string),
       long: 'format',
       short: 'f',
-      description: 'Output format (json, yaml, xml, markdown)',
+      description: `Output format (${validFormats.join(', ')})`,
     }),
     outputPath: option({
       type: optional(string),
@@ -83,6 +85,11 @@ const cmd = command({
         config = await loadConfig(configPath);
       } catch (error) {
         if (args.source) {
+          const format = args.format || 'json';
+          if (!validFormats.includes(format as OutputFormat)) {
+            console.error(`Error: Invalid format '${format}'. Must be one of ${validFormats.join(', ')}.`);
+            process.exit(1);
+          }
           // Create minimal config if no config file but source is provided
           config = {
             source: {
@@ -90,7 +97,7 @@ const cmd = command({
               path: args.source
             },
             output: {
-              format: (args.format || 'json') as any
+              format: format as OutputFormat,
             },
           };
         } else {
