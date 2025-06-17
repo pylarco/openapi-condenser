@@ -12,6 +12,7 @@ export const fetchSpec = async (
 ): Promise<OpenAPIExtractorResult> => {
   try {
     let content: string;
+    let contentType: string | null = null;
     
     if (sourceType === 'local') {
       content = await fs.readFile(sourcePath, 'utf-8');
@@ -24,33 +25,53 @@ export const fetchSpec = async (
         };
       }
       content = await response.text();
+      contentType = response.headers.get('Content-Type');
     }
     
+    const data = parseContent(content, sourcePath, contentType);
     return {
       success: true,
-      data: parseContent(content, sourcePath),
+      data,
     };
   } catch (error) {
     return {
       success: false,
-      errors: [`Error fetching spec: ${error instanceof Error ? error.message : String(error)}`]
+      errors: [`Error processing spec: ${error instanceof Error ? error.message : String(error)}`]
     };
   }
 };
 
 /**
- * Parse content based on file extension or content type
+ * Parse content based on file extension or content type, with fallback.
  */
-export const parseContent = (content: string, source: string): any => {
-  const ext = extname(source).toLowerCase();
-  
+export const parseContent = (content: string, source: string, contentType?: string | null): any => {
   try {
-    if (ext === '.yaml' || ext === '.yml') {
-      return YAML.parse(content);
-    } else {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content);
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content);
+      }
+    }
+
+    // 2. Try parsing based on file extension
+    const ext = extname(source).toLowerCase();
+    if (ext === '.json') {
       return JSON.parse(content);
     }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content);
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content);
+    } catch (jsonError) {
+      return YAML.parse(content);
+    }
   } catch (error) {
-    throw new Error(`Failed to parse content: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Failed to parse content from '${source}'. Not valid JSON or YAML.`);
   }
-}; 
+};

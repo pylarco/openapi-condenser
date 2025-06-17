@@ -4,7 +4,6 @@ import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
 import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 /**
  * Extract OpenAPI information based on configuration
@@ -75,58 +74,53 @@ export const mergeWithCommandLineArgs = (
   config: ExtractorConfig,
   args: Record<string, any>
 ): ExtractorConfig => {
-  const result = { ...config };
+  // Deep copy to avoid mutating the original config object
+  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
   
   // Override source settings
   if (args.source) {
-    result.source = {
-      ...result.source,
-      path: args.source
-    };
+    result.source.path = args.source;
   }
   
   if (args.sourceType) {
-    result.source = {
-      ...result.source,
-      type: args.sourceType as 'local' | 'remote'
-    };
+    result.source.type = args.sourceType as 'local' | 'remote';
   }
   
   // Override output settings
   if (args.format) {
-    result.output = {
-      ...result.output,
-      format: args.format
-    };
+    result.output.format = args.format;
   }
   
   if (args.outputPath) {
-    result.output = {
-      ...result.output,
-      destination: args.outputPath
-    };
+    result.output.destination = args.outputPath;
+  }
+  
+  // Initialize filter if it doesn't exist
+  if (!result.filter) {
+    result.filter = {};
   }
   
   // Override filter settings
-  if (args.paths) {
-    result.filter = {
-      ...result.filter,
-      paths: args.paths.split(',')
-    };
+  if (args.includePaths) {
+    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
+  }
+  if (args.excludePaths) {
+    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
   }
   
-  if (args.tags) {
-    result.filter = {
-      ...result.filter,
-      tags: args.tags.split(',')
-    };
+  if (args.includeTags) {
+    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
+  }
+  if (args.excludeTags) {
+    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
   }
   
   if (args.methods) {
-    result.filter = {
-      ...result.filter,
-      methods: args.methods.split(',')
-    };
+    result.filter.methods = args.methods.split(',');
+  }
+  
+  if (args.includeDeprecated) {
+    result.filter.includeDeprecated = args.includeDeprecated;
   }
   
   return result;

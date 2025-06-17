@@ -25,6 +25,6 @@
     "noUnusedParameters": true,
     "noImplicitAny": true
   },
-  "include": ["src", "src/**/*.ts"],
+  "include": ["src", "openapi-condenser.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

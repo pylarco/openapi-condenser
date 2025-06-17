@@ -10,8 +10,14 @@ const config: ExtractorConfig = {
     destination: './output', // Output directory or file
   },
   filter: {
-    paths: undefined, // Filter by paths - string[] or RegExp
-    tags: undefined, // Filter by tags - string[] or RegExp
+    paths: {
+      // e.g., include: ['/users/**', '/pets/**'],
+      // e.g., exclude: ['/users/{userId}/posts']
+    }, // Filter by paths using glob patterns
+    tags: {
+      // e.g., include: ['user', 'pet*'],
+      // e.g., exclude: ['internal']
+    }, // Filter by tags using glob patterns
     methods: undefined, // Filter by HTTP methods
     includeDeprecated: false, // Whether to include deprecated endpoints
   },
@@ -28,4 +34,4 @@ const config: ExtractorConfig = {
   },
 };
 
-export default config; 
+export default config;

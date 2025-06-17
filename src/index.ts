@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { parse } from 'cmd-ts';
-import { command, option, string, boolean, optional, flag } from 'cmd-ts';
+import { command, option, string, optional, flag } from 'cmd-ts';
 import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
 import type { ExtractorConfig } from './types';
 
@@ -38,15 +38,25 @@ const cmd = command({
       short: 'o',
       description: 'Output file path',
     }),
-    paths: option({
+    includePaths: option({
       type: optional(string),
-      long: 'paths',
-      description: 'Filter by paths (comma-separated)',
+      long: 'include-paths',
+      description: 'Include paths by glob patterns (comma-separated)',
     }),
-    tags: option({
+    excludePaths: option({
       type: optional(string),
-      long: 'tags',
-      description: 'Filter by tags (comma-separated)',
+      long: 'exclude-paths',
+      description: 'Exclude paths by glob patterns (comma-separated)',
+    }),
+    includeTags: option({
+      type: optional(string),
+      long: 'include-tags',
+      description: 'Include endpoints by tag glob patterns (comma-separated)',
+    }),
+    excludeTags: option({
+      type: optional(string),
+      long: 'exclude-tags',
+      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
     }),
     methods: option({
       type: optional(string),

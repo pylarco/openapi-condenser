@@ -1,4 +1,27 @@
-import type { FilterOptions, TransformOptions, SchemaTransformer } from './types';
+import type { FilterOptions, TransformOptions, SchemaTransformer, FilterPatterns } from './types';
+import micromatch from 'micromatch';
+
+/**
+ * Checks if an endpoint's tags match the provided patterns.
+ */
+function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): boolean {
+  const { include, exclude } = tagPatterns;
+
+  if (!include?.length && !exclude?.length) {
+    return true; // No tag filter, always matches
+  }
+  
+  // If endpoint has no tags, it cannot match an include filter.
+  if (!endpointTags.length) {
+    return !include?.length;
+  }
+  
+  const matchesInclude = include?.length ? micromatch.some(endpointTags, include) : true;
+  const matchesExclude = exclude?.length ? micromatch.some(endpointTags, exclude) : false;
+
+  return matchesInclude && !matchesExclude;
+}
+
 
 /**
  * Filter paths based on configuration
@@ -9,17 +32,18 @@ export const filterPaths = (
 ): Record<string, any> => {
   if (!filterOptions) return paths;
   
-  return Object.entries(paths).reduce((acc, [path, methods]) => {
-    // Filter by path
-    if (filterOptions.paths) {
-      if (filterOptions.paths instanceof RegExp && !filterOptions.paths.test(path)) {
-        return acc;
-      } else if (Array.isArray(filterOptions.paths) && !filterOptions.paths.includes(path)) {
-        return acc;
-      }
-    }
-    
-    // Filter methods based on configuration
+  const pathKeys = Object.keys(paths);
+  let filteredPathKeys = pathKeys;
+
+  if (filterOptions.paths?.include?.length) {
+    filteredPathKeys = micromatch(filteredPathKeys, filterOptions.paths.include, { dot: true });
+  }
+  if (filterOptions.paths?.exclude?.length) {
+    filteredPathKeys = micromatch.not(filteredPathKeys, filterOptions.paths.exclude, { dot: true });
+  }
+
+  return filteredPathKeys.reduce((acc, path) => {
+    const methods = paths[path];
     const filteredMethods = filterMethods(methods, filterOptions);
     
     if (Object.keys(filteredMethods).length > 0) {
@@ -49,19 +73,8 @@ export const filterMethods = (
     }
     
     // Filter by tags
-    if (filterOptions.tags && definition.tags) {
-      const hasMatchingTag = definition.tags.some((tag: string) => {
-        if (filterOptions.tags instanceof RegExp) {
-          return filterOptions.tags.test(tag);
-        } else if (Array.isArray(filterOptions.tags)) {
-          return filterOptions.tags.includes(tag);
-        }
-        return false;
-      });
-      
-      if (!hasMatchingTag) {
-        return acc;
-      }
+    if (filterOptions.tags && !matchesTags(definition.tags, filterOptions.tags)) {
+      return acc;
     }
     
     acc[method] = definition;
@@ -86,7 +99,7 @@ export const transformSchema = (
     if (Array.isArray(schema)) {
       return schema.length > 0 ? ['...'] : [];
     }
-    return { truncated: true };
+    return { truncated: true, reason: `Max depth of ${transformOptions.maxDepth} reached` };
   }
   
   // Handle arrays
@@ -128,33 +141,27 @@ export const transformOpenAPI = (
   filterOpts?: FilterOptions,
   transformOpts?: TransformOptions
 ): any => {
-  const result = { ...openapi };
+  // Create a deep copy to avoid mutating the original object
+  let result = JSON.parse(JSON.stringify(openapi));
   
-  // Transform paths if they exist
+  // Filter paths first
   if (result.paths && filterOpts) {
     result.paths = filterPaths(result.paths, filterOpts);
   }
   
-  // Apply schema transformations
+  // Then apply transformations on the filtered spec
   if (transformOpts) {
-    // Remove server information if not required
-    if (!transformOpts.includeServers && result.servers) {
+    if (!transformOpts.includeServers) {
       delete result.servers;
     }
-    
-    // Remove API info if not required
-    if (!transformOpts.includeInfo && result.info) {
+    if (!transformOpts.includeInfo) {
       delete result.info;
     }
-    
-    // Transform schemas if they exist
-    if (result.components?.schemas) {
-      result.components.schemas = transformSchema(
-        result.components.schemas,
-        transformOpts
-      );
-    }
+    // Apply recursive transformations to the entire document
+    result = transformSchema(result, transformOpts);
   }
+
+  // A future improvement could be to remove unused components after path filtering.
   
   return result;
 };
@@ -165,4 +172,4 @@ export const transformOpenAPI = (
 export const composeTransformers = 
   (...transformers: SchemaTransformer[]): SchemaTransformer => 
   (schema: any) => 
-    transformers.reduce((result, transformer) => transformer(result), schema); 
+    transformers.reduce((result, transformer) => transformer(result), schema);

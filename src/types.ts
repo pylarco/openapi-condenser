@@ -1,8 +1,13 @@
 export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
 
+export type FilterPatterns = {
+  include?: string[];
+  exclude?: string[];
+};
+
 export type FilterOptions = {
-  paths?: string[] | RegExp;
-  tags?: string[] | RegExp;
+  paths?: FilterPatterns;
+  tags?: FilterPatterns;
   methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
   includeDeprecated?: boolean;
 };
@@ -39,4 +44,4 @@ export type OpenAPIExtractorResult = {
   errors?: string[];
 };
 
-export type SchemaTransformer = (schema: any) => any; 
+export type SchemaTransformer = (schema: any) => any;
