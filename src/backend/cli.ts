@@ -3,7 +3,8 @@ import { parse } from 'cmd-ts';
 import { command, option, string, optional, flag } from 'cmd-ts';
 import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
 import type { ExtractorConfig, OutputFormat } from './types';
-import { OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH } from './constants';
 
 // Define CLI command
 const cmd = command({
@@ -89,14 +90,14 @@ const cmd = command({
   handler: async (args) => {
     try {
       // Load configuration
-      const configPath = args.config || './openapi-condenser.config.ts';
+      const configPath = args.config || DEFAULT_CONFIG_PATH;
       let config: ExtractorConfig;
       
       try {
         config = await loadConfig(configPath);
       } catch (error) {
         if (args.source) {
-          const format = args.format || 'json';
+          const format = args.format || DEFAULT_OUTPUT_FORMAT;
           if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
             console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
             process.exit(1);

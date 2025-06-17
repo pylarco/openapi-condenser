@@ -1,54 +1,22 @@
-Of course! I'd be happy to help refactor your codebase by centralizing constants. This is a great practice for improving maintainability and ensuring consistency. Here are the files that have been changed to achieve this:
+Of course! I'll refactor your codebase to centralize constants. Shared constants will be moved to `src/shared/constants.ts`, frontend-specific ones to `src/frontend/constants.ts`, and backend-specific ones to `src/backend/constants.ts`. This will make your configuration much cleaner and easier to manage.
 
-I've created a new `src/shared/constants.ts` for constants shared between the frontend and backend, and a `src/backend/constants.ts` for backend-specific values. Then I updated all files that used these constants to import them from their new central locations.
+Here are the code changes:
 
-### New Files
+```typescript // vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
 
-I've added two new files to centralize your constants.
-
-```typescript // src/backend/constants.ts
-export const contentTypeMappings: ReadonlyArray<[string, string]> = [
-    ['json', 'json'],
-    ['form-data', 'form-data'],
-    ['x-www-form-urlencoded', 'form-urlencoded'],
-    ['xml', 'xml'],
-    ['text/plain', 'text'],
-];
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      [API_PREFIX]: API_BASE_URL
+    }
+  }
+})
 ```
-
-```typescript // src/shared/constants.ts
-import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
-
-// --- Default Config ---
-export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
-
-export const HTTP_METHODS: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-
-export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
-```
-
-### Updated Files
-
-Here are the updated files that now import from the new constant files:
 
 ```typescript // src/backend/cli.ts
 #!/usr/bin/env bun
@@ -56,7 +24,8 @@ import { parse } from 'cmd-ts';
 import { command, option, string, optional, flag } from 'cmd-ts';
 import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
 import type { ExtractorConfig, OutputFormat } from './types';
-import { OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH } from './constants';
 
 // Define CLI command
 const cmd = command({
@@ -142,14 +111,14 @@ const cmd = command({
   handler: async (args) => {
     try {
       // Load configuration
-      const configPath = args.config || './openapi-condenser.config.ts';
+      const configPath = args.config || DEFAULT_CONFIG_PATH;
       let config: ExtractorConfig;
       
       try {
         config = await loadConfig(configPath);
       } catch (error) {
         if (args.source) {
-          const format = args.format || 'json';
+          const format = args.format || DEFAULT_OUTPUT_FORMAT;
           if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
             console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
             process.exit(1);
@@ -208,6 +177,20 @@ const cmd = command({
 await parse(cmd, process.argv.slice(2));
 ```
 
+```typescript // src/backend/constants.ts
+export const contentTypeMappings: ReadonlyArray<[string, string]> = [
+    ['json', 'json'],
+    ['form-data', 'form-data'],
+    ['x-www-form-urlencoded', 'form-urlencoded'],
+    ['xml', 'xml'],
+    ['text/plain', 'text'],
+];
+
+export const DEFAULT_CONFIG_PATH = './openapi-condenser.config.ts';
+export const TOKEN_CHAR_RATIO = 4;
+export const USER_AGENT = 'OpenAPI-Condenser/1.0';
+```
+
 ```typescript // src/backend/extractor.ts
 import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
 import { fetchSpec } from './utils/fetcher';
@@ -217,6 +200,7 @@ import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
 
 export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   if (!spec || typeof spec !== 'object') {
@@ -230,7 +214,7 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   const lineCount = prettySpecString.split('\n').length;
   // Rough approximation of token count, as it varies by model.
   // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / 4);
+  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
 
   const validMethods = new Set(HTTP_METHODS);
   const paths = Object.keys(spec.paths || {});
@@ -256,7 +240,7 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
 export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
     const charCount = output.length;
     const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / 4);
+    const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
 
     return { charCount, lineCount, tokenCount };
 }
@@ -343,7 +327,7 @@ export const extractOpenAPI = async (
  * Load configuration from file
  */
 export const loadConfig = async (
-  configPath: string = './openapi-condenser.config.ts'
+  configPath: string = DEFAULT_CONFIG_PATH
 ): Promise<ExtractorConfig> => {
   try {
     // Convert file path to URL for import()
@@ -432,620 +416,367 @@ export const mergeWithCommandLineArgs = (
 };
 ```
 
-```typescript // src/backend/formatters/concise-text.ts
-import { OpenAPIV3 } from 'openapi-types';
-import { contentTypeMappings } from '../constants';
-import { HTTP_METHODS } from '../../shared/constants';
+```typescript // src/backend/server.ts
+import { Elysia, t } from 'elysia';
+import { swagger } from '@elysiajs/swagger';
+import { cors } from '@elysiajs/cors';
+import { extractOpenAPI } from './extractor';
+import type { ExtractorConfig, SpecStats } from './types';
+import { resolve } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import { API_PORT } from '../shared/constants';
+import { USER_AGENT } from './constants';
 
-const resolveRef = <T extends object>(
-  refObj: OpenAPIV3.ReferenceObject | T,
-  doc: OpenAPIV3.Document,
-): T => {
-  if (!refObj || typeof refObj !== 'object' || !('$ref' in refObj))
-    return refObj as T;
-
-  const refPath = refObj.$ref.replace('#/components/', '').split('/');
-  let current: any = doc.components;
-  for (const part of refPath) {
-    current = current?.[part];
+// Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
+const isPrivateIP = (ip: string) => {
+  // IPv6 loopback and private ranges
+  if (ip === '::1' || ip.startsWith('fc00:') || ip.startsWith('fd00:')) {
+    return true;
   }
-  return (current || refObj) as T;
+  
+  // Check for IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+  if (ip.startsWith('::ffff:')) {
+    ip = ip.substring(7);
+  }
+
+  // Handle localhost IPs
+  if (ip === '127.0.0.1' || ip === '::1') {
+    return true;
+  }
+
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(isNaN)) {
+     // Don't classify non-IPv4 strings as private, but this path shouldn't be hit with valid IPs.
+     return false;
+  }
+
+  const [p1, p2, p3, p4] = parts;
+  if (p1 === undefined || p2 === undefined || p3 === undefined || p4 === undefined) {
+    return false; // Should not happen due to the length check, but satisfies TS
+  }
+
+  return (
+    p1 === 10 || // 10.0.0.0/8
+    (p1 === 172 && p2 >= 16 && p2 <= 31) || // 172.16.0.0/12
+    (p1 === 192 && p2 === 168) || // 192.168.0.0/16
+    p1 === 127 || // 127.0.0.0/8
+    (p1 === 169 && p2 === 254) // 169.254.0.0/16 (APIPA)
+  );
 };
 
-const formatSchemaType = (
-  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
-  doc: OpenAPIV3.Document,
-): string => {
-  if (!schema) return 'any';
-  if ('$ref' in schema) {
-    return schema.$ref.split('/').pop() || 'any';
-  }
-  if (schema.type === 'array' && schema.items) {
-    const itemType = formatSchemaType(schema.items, doc);
-    return `array<${itemType}>`;
-  }
-  return schema.type || 'any';
-};
-
-const shortenContentType = (contentType: string): string => {
-    for (const [key, shortName] of contentTypeMappings) {
-        if (contentType.includes(key)) {
-            return shortName;
-        }
+export const app = new Elysia()
+  .use(swagger())
+  .use(cors({
+    origin: /^http:\/\/localhost(:\d+)?$/,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  }))
+  .onError(({ code, error, set }) => {
+    if (code === 'VALIDATION') {
+      set.status = 400;
+      return { error: error.message };
     }
-    return contentType;
-};
-
-
-const formatProperties = (
-  properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
-  required: string[] | undefined,
-  doc: OpenAPIV3.Document,
-  indent = 0,
-): string => {
-  let propsMarkdown = '';
-  const indentStr = '  '.repeat(indent);
-
-  for (const [propName, propSchema] of Object.entries(properties)) {
-    const resolvedPropSchema = resolveRef(propSchema, doc);
-    const isRequired = required?.includes(propName);
-    const requiredStr = isRequired ? ' (required)' : '';
-    
-    const typeStr = formatSchemaType(propSchema, doc);
-    const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
-
-    propsMarkdown += `${indentStr}- ${propName}:${typeStr}${requiredStr}${descriptionStr}\n`;
-
-    let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
-    const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
-
-    if (resolvedPropSchema.type === 'object') {
-        nestedPropsSchema = resolvedPropSchema;
-    } else if (resolvedItems?.type === 'object') {
-        nestedPropsSchema = resolvedItems;
+  })
+  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+    if (!url) {
+        set.status = 400;
+        return { error: 'URL parameter is required' };
     }
-
-    if (nestedPropsSchema?.properties) {
-        propsMarkdown += formatProperties(nestedPropsSchema.properties, nestedPropsSchema.required, doc, indent + 1);
-    }
-  }
-  return propsMarkdown;
-};
-
-const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    output += `${method.toUpperCase()} ${path}\n`;
-
-    const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
-    if (description) {
-      output += `D: ${description}\n`;
-    }
-
-    // Parameters
-    if (operation.parameters?.length) {
-      output += `P:\n`;
-      for (const paramRef of operation.parameters) {
-        const param = resolveRef(paramRef, data);
-        const schema = param.schema as OpenAPIV3.SchemaObject;
-        const type = schema ? formatSchemaType(schema, data) : 'any';
-        const required = param.required ? 'required' : 'optional';
-        const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `  - ${param.name}: ${type} (${param.in}, ${required})${paramDesc}\n`;
-      }
-    }
-    
-    // Request Body
-    if (operation.requestBody) {
-      const requestBody = resolveRef(operation.requestBody, data);
-      if (requestBody.content) {
-        const contentEntries = Object.entries(requestBody.content);
-        if (contentEntries.length > 0) {
-            const firstEntry = contentEntries[0];
-            if (firstEntry) {
-                const schemaName = formatSchemaType(firstEntry[1].schema, data);
-                if (contentEntries.length === 1) {
-                    output += `B: ${shortenContentType(firstEntry[0])} -> ${schemaName}\n`;
-                } else {
-                    output += `B:\n`;
-                    for (const [contentType, mediaType] of contentEntries) {
-                        output += `  - ${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}\n`;
-                    }
-                }
-            }
-        }
-      }
-    }
-
-    // Responses
-    if (operation.responses) {
-      output += `R:\n`;
-      const groupedResponses: { [key: string]: string[] } = {};
+    try {
+      const urlObj = new URL(url);
       
-      for (const [code, responseRef] of Object.entries(operation.responses)) {
-        const response = resolveRef(responseRef, data);
-        const responseIdParts: string[] = [];
-        if (response.content) {
-            for (const [contentType, mediaType] of Object.entries(response.content)) {
-                responseIdParts.push(`${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}`);
-            }
-        }
-        
-        let responseId = responseIdParts.join(', ');
-        if (!responseId) {
-            responseId = response.description?.replace(/\n/g, ' ') || 'No description';
-        }
-
-        groupedResponses[responseId] = [...(groupedResponses[responseId] || []), code];
+      // Basic check for http/https protocols
+      if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+        set.status = 400;
+        return { error: 'URL must use http or https protocol.' };
       }
 
-      for (const [responseId, codes] of Object.entries(groupedResponses)) {
-           output += `  ${codes.join(', ')}: ${responseId}\n`;
+      const hostname = urlObj.hostname;
+      const isHostnameIp = isIP(hostname) !== 0;
+
+      // If hostname is an IP, check if it's private
+      if (isHostnameIp) {
+        if (isPrivateIP(hostname)) {
+          set.status = 403;
+          return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+        }
+      } else {
+        // If it's a domain name, resolve it and check all returned IPs
+        try {
+          let resolved = await resolve(hostname);
+          if (!Array.isArray(resolved)) {
+            resolved = [resolved];
+          }
+          const addresses = resolved.map((a: any) => (typeof a === 'string' ? a : a.address)).filter(Boolean);
+
+          if (addresses.some(isPrivateIP)) {
+            set.status = 403;
+            return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+          }
+        } catch (dnsError) {
+            set.status = 400;
+            return { error: `Could not resolve hostname: ${hostname}` };
+        }
+      }
+
+      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+      
+      if (!response.ok) {
+        // Pass through the status code from the remote server if it's an error
+        set.status = response.status;
+        const errorText = await response.text();
+        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. Details: ${errorText}` };
+      }
+
+      const content = await response.text();
+      return { content };
+
+    } catch (e) {
+      if (e instanceof TypeError) {
+        set.status = 400;
+        return { error: `Invalid URL provided: ${url}` };
+      }
+      
+      // Catches other unexpected errors
+      set.status = 500;
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: `An unexpected error occurred: ${message}` };
+    }
+  }, {
+    query: t.Object({
+      url: t.Optional(t.String({
+        format: 'uri-reference',
+        description: 'A public URL to an OpenAPI specification file.',
+        error: 'Invalid URL format provided.'
+      }))
+    }),
+    response: {
+      200: t.Object({ content: t.String() }),
+      400: t.Object({ error: t.String() }),
+      403: t.Object({ error: t.String() }),
+      404: t.Object({ error: t.String() }), // Test expects 404 for not found
+      500: t.Object({ error: t.String() })
+    },
+    detail: {
+        tags: ['API'],
+        summary: 'Fetch an OpenAPI specification from a public URL',
+        description: `Fetches the content of a remote OpenAPI specification. Performs basic SSRF protection by disallowing requests to private, loopback, or otherwise reserved IP addresses.`,
+    }
+  })
+  .post(
+    '/api/condense',
+    async ({ body, set }) => {
+      const config: ExtractorConfig = {
+        source: {
+          type: 'memory',
+          content: body.source.content,
+          path: body.source.path,
+        },
+        output: {
+          format: body.output.format,
+        },
+        filter: {
+          ...body.filter,
+          includeDeprecated: body.filter?.includeDeprecated ?? false,
+        },
+        transform: {
+          removeExamples: body.transform?.removeExamples ?? false,
+          removeDescriptions: body.transform?.removeDescriptions ?? false,
+          removeSummaries: body.transform?.removeSummaries ?? false,
+          includeServers: body.transform?.includeServers ?? true,
+          includeInfo: body.transform?.includeInfo ?? true,
+          includeSchemas: body.transform?.includeSchemas ?? true,
+          includeRequestBodies: body.transform?.includeRequestBodies ?? true,
+          includeResponses: body.transform?.includeResponses ?? true,
+        },
+      };
+
+      const result = await extractOpenAPI(config);
+
+      if (!result.success) {
+        set.status = 400;
+        return {
+          success: false,
+          errors: result.errors || ['Unknown error occurred'],
+          warnings: result.warnings
+        };
+      }
+
+      // Ensure we have stats with the expected structure
+      const defaultStats: SpecStats = { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
+      const stats = result.stats || { before: defaultStats, after: defaultStats };
+
+      return {
+        success: true as const,
+        data: result.data as string,
+        stats: {
+          before: stats.before || defaultStats,
+          after: stats.after || defaultStats
+        },
+        warnings: result.warnings
+      };
+    },
+    {
+      body: t.Object({
+        source: t.Object({
+          content: t.String(),
+          path: t.String(),
+        }),
+        output: t.Object({
+          format: t.Union([
+            t.Literal('json'),
+            t.Literal('yaml'),
+            t.Literal('xml'),
+            t.Literal('markdown'),
+          ]),
+        }),
+        filter: t.Optional(
+          t.Object({
+            paths: t.Optional(t.Object({
+              include: t.Optional(t.Array(t.String())),
+              exclude: t.Optional(t.Array(t.String())),
+            })),
+            tags: t.Optional(t.Object({
+                include: t.Optional(t.Array(t.String())),
+                exclude: t.Optional(t.Array(t.String())),
+            })),
+            operationIds: t.Optional(t.Object({
+              include: t.Optional(t.Array(t.String())),
+              exclude: t.Optional(t.Array(t.String())),
+            })),
+            methods: t.Optional(t.Array(t.Union([
+                t.Literal('get'),
+                t.Literal('post'),
+                t.Literal('put'),
+                t.Literal('delete'),
+                t.Literal('patch'),
+                t.Literal('options'),
+                t.Literal('head'),
+                t.Literal('trace'),
+            ]))),
+            includeDeprecated: t.Optional(t.Boolean()),
+          })
+        ),
+        transform: t.Optional(
+          t.Object({
+            removeExamples: t.Optional(t.Boolean()),
+            removeDescriptions: t.Optional(t.Boolean()),
+            removeSummaries: t.Optional(t.Boolean()),
+            includeServers: t.Optional(t.Boolean()),
+            includeInfo: t.Optional(t.Boolean()),
+            includeSchemas: t.Optional(t.Boolean()),
+            includeRequestBodies: t.Optional(t.Boolean()),
+            includeResponses: t.Optional(t.Boolean()),
+          })
+        ),
+      }),
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          data: t.String(),
+          stats: t.Object({
+            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number(), charCount: t.Number(), lineCount: t.Number(), tokenCount: t.Number() }),
+            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number(), charCount: t.Number(), lineCount: t.Number(), tokenCount: t.Number() }),
+          }),
+          warnings: t.Optional(t.Array(t.String())),
+        }),
+        400: t.Object({
+          success: t.Literal(false),
+          errors: t.Optional(t.Array(t.String())),
+          warnings: t.Optional(t.Array(t.String())),
+        })
       }
     }
-    return output;
+  );
+
+export type App = typeof app;
+
+if (import.meta.main) {
+  app.listen(API_PORT);
+  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 }
-
-const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    const schema = resolveRef(schemaRef, data);
-      
-    output += `SCHEMA: ${name}\n`;
-    if (schema.description) {
-        output += `D: ${schema.description.replace(/\n/g, ' ')}\n`;
-    }
-
-    if (schema.type === 'object' && schema.properties) {
-        output += 'PROPS:\n';
-        output += formatProperties(schema.properties, schema.required, data, 1);
-    } else if (schema.type === 'array' && schema.items) {
-        output += `ARRAY OF: ${formatSchemaType(schema.items, data)}\n`;
-        const resolvedItems = resolveRef(schema.items, data);
-        if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 1);
-        }
-    } else if (schema.type) {
-        output += `TYPE: ${schema.type}\n`;
-    }
-    return output;
-}
-
-/**
- * Format data as a concise text format for LLMs.
- */
-export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
-  const endpoints: string[] = [];
-  const schemas: string[] = [];
-  
-  // Endpoints
-  if (data.paths) {
-    for (const [path, pathItem] of Object.entries(data.paths)) {
-      if (!pathItem) continue;
-      
-      const validMethods = Object.keys(pathItem).filter(method => 
-        HTTP_METHODS.includes(method as any)
-      ) as (keyof typeof pathItem)[];
-
-      for (const method of validMethods) {
-        const operation = pathItem[method] as OpenAPIV3.OperationObject;
-        if (!operation || typeof operation !== 'object' || !('responses' in operation)) continue;
-        
-        endpoints.push(formatEndpoint(method, path, operation, data));
-      }
-    }
-  }
-
-  // Schemas
-  if (data.components?.schemas) {
-    for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
-        schemas.push(formatSchema(name, schemaRef, data));
-    }
-  }
-
-  let output = endpoints.join('\n');
-  
-  if (schemas.length > 0) {
-      if (output.length > 0) {
-        output += '\n---\n\n';
-      }
-      output += schemas.join('\n');
-  }
-  
-  return output.trim();
-};
 ```
 
-```typescript // src/backend/transformer.ts
+```typescript // src/frontend/App.tsx
+import { useRef } from 'react';
 import {
-  type FilterOptions,
-  type TransformOptions,
-  type SchemaTransformer,
-  type FilterPatterns,
-  type HttpMethod,
-} from './types';
-import micromatch from 'micromatch';
-import { OpenAPIV3 } from 'openapi-types';
-import { HTTP_METHODS } from '../shared/constants';
+  ActionPanel,
+  ConfigPanel,
+  InputPanel,
+  OutputPanel,
+  StatsPanel,
+} from './components/features';
+import { usePanelEntrance } from './state/motion.reuse';
+import { APP_SUBTITLE, APP_TITLE, NAV_LINKS } from './constants';
 
-/**
- * Checks if an endpoint's tags match the provided patterns.
- */
-function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): boolean {
-  const { include, exclude } = tagPatterns;
+export default function App() {
+  const configPanelRef = useRef<HTMLDivElement>(null);
+  const mainPanelsRef = useRef<HTMLDivElement>(null);
 
-  if (!include?.length && !exclude?.length) {
-    return true; // No tag filter, always matches
-  }
-  
-  // If endpoint has no tags, it cannot match an include filter.
-  if (!endpointTags.length) {
-    return !include?.length;
-  }
-  
-  const matchesInclude = include?.length ? micromatch.some(endpointTags, include) : true;
-  const matchesExclude = exclude?.length ? micromatch.some(endpointTags, exclude) : false;
+  usePanelEntrance(configPanelRef);
+  usePanelEntrance(mainPanelsRef);
 
-  return matchesInclude && !matchesExclude;
+  return (
+    <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
+      <header className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-sm border-b border-slate-700/50 z-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center">
+            <h1 className="text-xl font-bold text-white mr-4">
+              <span className="text-cyan-400">{APP_TITLE.split(' ')[0]}</span> {APP_TITLE.split(' ')[1]}
+            </h1>
+            <p className="text-sm text-slate-400 hidden sm:block">{APP_SUBTITLE}</p>
+          </div>
+          <nav className="flex items-center gap-4">
+            <a href={NAV_LINKS.SDK} className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              SDK
+            </a>
+            <a href={NAV_LINKS.API} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              API
+            </a>
+            <a href={NAV_LINKS.GITHUB} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              GitHub
+            </a>
+            <a 
+              href={NAV_LINKS.SPONSOR} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-pink-500 to-orange-500 text-white font-medium rounded-md hover:from-pink-600 hover:to-orange-600 transition-colors"
+            >
+              Sponsor
+            </a>
+          </nav>
+        </div>
+      </header>
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-4 xl:col-span-3" ref={configPanelRef}>
+            <ConfigPanel />
+          </div>
+
+          <div
+            className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8"
+            ref={mainPanelsRef}
+          >
+            <InputPanel />
+            <ActionPanel />
+            <StatsPanel />
+            <OutputPanel />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }
+```
 
-/**
- * Filter paths based on configuration
- */
-export const filterPaths = (
-  paths: OpenAPIV3.PathsObject,
-  filterOptions: FilterOptions,
-): OpenAPIV3.PathsObject => {
-  if (!filterOptions) return paths;
-  
-  const pathKeys = Object.keys(paths);
-  let filteredPathKeys = pathKeys;
+```typescript // src/frontend/client.ts
+import { edenTreaty } from '@elysiajs/eden';
+import type { App } from '../backend/server';
+import { API_BASE_URL } from '../shared/constants';
 
-  if (filterOptions.paths?.include?.length) {
-    filteredPathKeys = micromatch(filteredPathKeys, filterOptions.paths.include, { dot: true });
-  }
-  if (filterOptions.paths?.exclude?.length) {
-    filteredPathKeys = micromatch.not(filteredPathKeys, filterOptions.paths.exclude, { dot: true });
-  }
-
-  return filteredPathKeys.reduce((acc, path) => {
-    const pathItem = paths[path];
-    if (pathItem) {
-      const filteredMethods = filterMethods(pathItem, filterOptions);
-
-      if (Object.keys(filteredMethods).length > 0) {
-        // Re-add non-method properties from the original pathItem
-        const newPathItem: OpenAPIV3.PathItemObject = { ...filteredMethods };
-        if (pathItem.summary) newPathItem.summary = pathItem.summary;
-        if (pathItem.description) newPathItem.description = pathItem.description;
-        if (pathItem.parameters) newPathItem.parameters = pathItem.parameters;
-        if (pathItem.servers) newPathItem.servers = pathItem.servers;
-        if (pathItem.$ref) newPathItem.$ref = pathItem.$ref;
-        
-        acc[path] = newPathItem;
-      }
-    }
-
-    return acc;
-  }, {} as OpenAPIV3.PathsObject);
-};
-
-function isHttpMethod(method: string): method is HttpMethod {
-  return HTTP_METHODS.includes(method as HttpMethod);
-}
-
-/**
- * Filter HTTP methods based on configuration
- */
-export const filterMethods = (
-  pathItem: OpenAPIV3.PathItemObject,
-  filterOptions: FilterOptions,
-): OpenAPIV3.PathItemObject => {
-  const newPathItem: OpenAPIV3.PathItemObject = {};
-  
-  for (const key in pathItem) {
-    if (isHttpMethod(key)) {
-      const method: HttpMethod = key;
-      const operation = pathItem[method];
-
-      if (!operation) continue;
-
-      if (
-        filterOptions.methods &&
-        filterOptions.methods.length > 0 &&
-        !filterOptions.methods.includes(method)
-      ) {
-        continue;
-      }
-
-      if (!filterOptions.includeDeprecated && operation.deprecated) {
-        continue;
-      }
-
-      if (
-        filterOptions.tags &&
-        !matchesTags(operation.tags, filterOptions.tags)
-      ) {
-        continue;
-      }
-
-      newPathItem[method] = operation;
-    }
-  }
-  return newPathItem;
-};
-
-/**
- * Recursively find all $ref values in a given object.
- */
-export const findRefsRecursive = (
-  obj: any, // Keeping `any` here as it's a deep recursive search
-  refs: Set<string>,
-): void => {
-  if (!obj || typeof obj !== 'object') {
-    return;
-  }
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      findRefsRecursive(item, refs);
-    }
-    return;
-  }
-  for (const key in obj) {
-    if (key === '$ref' && typeof obj[key] === 'string') {
-      refs.add(obj[key]);
-    } else {
-      findRefsRecursive(obj[key], refs);
-    }
-  }
-};
-
-/**
- * Parses a component reference string.
- */
-export const getComponentNameFromRef = (ref: string): { type: string; name: string } | null => {
-  const prefix = '#/components/';
-  if (!ref.startsWith(prefix)) {
-    // This is not a component reference we can process for removal.
-    // It might be a reference to another part of the document, which is fine.
-    return null;
-  }
-  
-  const path = ref.substring(prefix.length);
-  const parts = path.split('/');
-  
-  // We expect a structure like 'schemas/MySchema' or 'parameters/MyParameter'
-  if (parts.length < 2) {
-    console.warn(`[OpenAPI Condenser] Invalid component reference found: ${ref}`);
-    return null;
-  }
-  
-  const type = parts[0];
-  // The name might contain slashes if it's nested, so we join the rest.
-  const name = parts.slice(1).join('/');
-
-  if (!type || !name) {
-    return null;
-  }
-
-  return { type, name };
-};
-
-/**
- * Removes all components (schemas, parameters, etc.) that are not referenced
- * in the remaining parts of the specification.
- */
-export const removeUnusedComponents = (
-  spec: OpenAPIV3.Document,
-): OpenAPIV3.Document => {
-  if (!spec.components) return spec;
-
-  // 1. Find all initial references from the spec roots that are kept.
-  const allRefs = new Set<string>();
-  const specRoots = [
-    spec.paths,
-    spec.tags,
-    spec.security,
-    spec.info,
-    spec.servers,
-    (spec as any).webhooks, // webhooks are in v3.1
-    spec.externalDocs,
-  ];
-
-  for (const root of specRoots) {
-    if (root) {
-      findRefsRecursive(root, allRefs);
-    }
-  }
-
-  // 2. Transitively discover all dependencies within the components.
-  // We keep iterating until no new references are found in an iteration.
-  let previousSize;
-  do {
-    previousSize = allRefs.size;
-    allRefs.forEach(ref => {
-      const componentInfo = getComponentNameFromRef(ref);
-      if (componentInfo) {
-        const { type, name } = componentInfo;
-        const component = (spec.components as any)?.[type]?.[name];
-        if (component) {
-          findRefsRecursive(component, allRefs);
-        }
-      }
-    });
-  } while (allRefs.size > previousSize);
-
-  // 3. Build a new components object with only the referenced items.
-  const newComponents: OpenAPIV3.ComponentsObject = {};
-  if (spec.components) {
-    for (const componentType in spec.components) {
-      const componentGroup = (spec.components as any)[componentType];
-      const newComponentGroup: Record<string, any> = {};
-      for (const componentName in componentGroup) {
-        const ref = `#/components/${componentType}/${componentName}`;
-        if (allRefs.has(ref)) {
-          newComponentGroup[componentName] = componentGroup[componentName];
-        }
-      }
-      if (Object.keys(newComponentGroup).length > 0) {
-        (newComponents as any)[componentType] = newComponentGroup;
-      }
-    }
-  }
-
-  // 4. Replace the old components object or remove it if empty.
-  if (Object.keys(newComponents).length > 0) {
-    (spec.components as any) = newComponents;
-  } else {
-    delete spec.components;
-  }
-
-  return spec;
-};
-
-/**
- * Transform OpenAPI schema based on configuration
- */
-export const transformSchema = (
-  node: any,
-  transformOptions: TransformOptions,
-  currentDepth = 0,
-): any => {
-  if (!node || typeof node !== 'object') {
-    return node;
-  }
-  
-  if ('$ref' in node) {
-    return node;
-  }
-  
-  // Handle maximum depth
-  if (
-    transformOptions.maxDepth !== undefined &&
-    currentDepth >= transformOptions.maxDepth
-  ) {
-    return {
-      description: `Truncated: Max depth of ${transformOptions.maxDepth} reached`,
-    };
-  }
-  
-  if (Array.isArray(node)) {
-    return node
-      .map(item => transformSchema(item, transformOptions, currentDepth + 1))
-      .filter(Boolean);
-  }
-
-  const result: { [key: string]: any } = { ...node };
-  
-  // Remove examples if configured
-  if (transformOptions.removeExamples && 'example' in result) {
-    delete result.example;
-  }
-  if (transformOptions.removeExamples && 'examples' in result) {
-    delete result.examples;
-  }
-  
-  // Remove descriptions if configured
-  if (transformOptions.removeDescriptions && 'description' in result) {
-    delete result.description;
-  }
-
-  // Remove summaries if configured
-  if (transformOptions.removeSummaries && 'summary' in result) {
-    delete result.summary;
-  }
-  
-  // Recursively transform nested properties
-  for (const key in result) {
-    const prop = result[key];
-    if (typeof prop === 'object' && prop !== null) {
-      result[key] = transformSchema(
-        prop,
-        transformOptions,
-        currentDepth + 1,
-      );
-    }
-  }
-  
-  return result;
-};
-
-/**
- * Applies both filtering and transformations to an entire OpenAPI document.
- */
-export const transformOpenAPI = (
-  openapi: OpenAPIV3.Document,
-  filterOpts?: FilterOptions,
-  transformOpts?: TransformOptions,
-): OpenAPIV3.Document => {
-  let transformed: OpenAPIV3.Document = JSON.parse(JSON.stringify(openapi));
-
-  // 1. Apply path/method/tag filtering
-  if (filterOpts && transformed.paths) {
-    transformed.paths = filterPaths(transformed.paths, filterOpts);
-  }
-
-  // 2. Apply structural removals based on transformOpts
-  if (transformOpts) {
-    if (transformOpts.includeServers === false) {
-      delete transformed.servers;
-    }
-    if (transformOpts.includeInfo === false) {
-      delete transformed.info;
-    }
-
-    if (transformed.paths) {
-      for (const path in transformed.paths) {
-        const pathItem = transformed.paths[path];
-        if (pathItem) {
-          for (const method of HTTP_METHODS) {
-            const operation = pathItem[method] as
-              | OpenAPIV3.OperationObject
-              | undefined;
-            if (operation) {
-              if (transformOpts.includeRequestBodies === false) {
-                delete operation.requestBody;
-              }
-              if (transformOpts.includeResponses === false) {
-                delete operation.responses;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 3. Apply granular transformations (remove descriptions/examples etc)
-  if (transformOpts) {
-    transformed = transformSchema(
-      transformed,
-      transformOpts,
-    ) as OpenAPIV3.Document;
-  }
-
-  // 4. Clean up unused components based on what's left.
-  transformed = removeUnusedComponents(transformed);
-
-  // 5. If schemas are explicitly excluded, remove them now.
-  if (transformOpts?.includeSchemas === false && transformed.components) {
-    delete transformed.components.schemas;
-    if (Object.keys(transformed.components).length === 0) {
-      delete transformed.components;
-    }
-  }
-
-  return transformed;
-};
-
-/**
- * Higher-order function for composing transformers
- */
-export const composeTransformers =
-  (...transformers: SchemaTransformer[]): SchemaTransformer =>
-  (schema: OpenAPIV3.SchemaObject) =>
-    transformers.reduce(
-      (currentSchema, transformer) => transformer(currentSchema),
-      schema,
-    );
+// Use with the specific older version
+export const client = edenTreaty<App>(API_BASE_URL);
 ```
 
 ```typescript // src/frontend/constants.ts
@@ -1053,6 +784,16 @@ import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { markdown } from '@codemirror/lang-markdown';
 import type { OutputFormat } from '../shared/types';
+
+// --- App Info ---
+export const APP_TITLE = 'OpenAPI Condenser';
+export const APP_SUBTITLE = 'Pack your OpenAPI into AI-friendly formats';
+export const NAV_LINKS = {
+    SDK: '/sdk',
+    API: '/swagger',
+    GITHUB: 'https://github.com/repomix/openapi-condenser',
+    SPONSOR: 'https://github.com/sponsors/repomix',
+};
 
 // --- Input Panel ---
 export const INPUT_DEBOUNCE_DELAY = 300; // ms
@@ -1075,13 +816,13 @@ import { atom } from 'jotai';
 import { client } from '../client';
 import type { OutputFormat, SpecStats } from '../../shared/types';
 import { DEFAULT_SPEC_FILENAME } from '../constants';
-import { defaultConfig } from '../../shared/constants';
+import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
 
 // --- Base State Atoms ---
 export const specContentAtom = atom<string>('');
 export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
 export const configAtom = atom(defaultConfig);
-export const outputFormatAtom = atom<OutputFormat>('markdown');
+export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
 
 // --- Derived/Async State Atoms ---
 export const outputAtom = atom<string>('');
@@ -1167,4 +908,41 @@ export const condenseSpecAtom = atom(
         }
     }
 );
+```
+
+```typescript // src/shared/constants.ts
+import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
+
+// --- App Config ---
+export const API_PORT = 3000;
+export const API_HOST = 'localhost';
+export const API_PREFIX = '/api';
+export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+
+// --- OpenAPI Semantics ---
+export const HTTP_METHODS: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
+
+// --- Default Extractor Config ---
+export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
+  filter: {
+    paths: { include: [], exclude: [] },
+    tags: { include: [], exclude: [] },
+    methods: [],
+    includeDeprecated: false,
+  },
+  transform: {
+    removeExamples: false,
+    removeDescriptions: false,
+    removeSummaries: false,
+    includeServers: true,
+    includeInfo: true,
+    includeSchemas: true,
+    includeRequestBodies: true,
+    includeResponses: true,
+  },
+};
 ```

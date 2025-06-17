@@ -1,6 +1,19 @@
 import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
 
-// --- Default Config ---
+// --- App Config ---
+export const API_PORT = 3000;
+export const API_HOST = 'localhost';
+export const API_PREFIX = '/api';
+export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+
+// --- OpenAPI Semantics ---
+export const HTTP_METHODS: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
+
+// --- Default Extractor Config ---
 export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
   filter: {
     paths: { include: [], exclude: [] },
@@ -19,9 +32,3 @@ export const defaultConfig: { filter: FilterOptions, transform: TransformOptions
     includeResponses: true,
   },
 };
-
-export const HTTP_METHODS: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-
-export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];

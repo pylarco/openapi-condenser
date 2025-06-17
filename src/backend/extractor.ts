@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
 
 export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   if (!spec || typeof spec !== 'object') {
@@ -19,7 +20,7 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   const lineCount = prettySpecString.split('\n').length;
   // Rough approximation of token count, as it varies by model.
   // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / 4);
+  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
 
   const validMethods = new Set(HTTP_METHODS);
   const paths = Object.keys(spec.paths || {});
@@ -45,7 +46,7 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
 export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
     const charCount = output.length;
     const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / 4);
+    const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
 
     return { charCount, lineCount, tokenCount };
 }
@@ -132,7 +133,7 @@ export const extractOpenAPI = async (
  * Load configuration from file
  */
 export const loadConfig = async (
-  configPath: string = './openapi-condenser.config.ts'
+  configPath: string = DEFAULT_CONFIG_PATH
 ): Promise<ExtractorConfig> => {
   try {
     // Convert file path to URL for import()

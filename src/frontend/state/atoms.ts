@@ -2,13 +2,13 @@ import { atom } from 'jotai';
 import { client } from '../client';
 import type { OutputFormat, SpecStats } from '../../shared/types';
 import { DEFAULT_SPEC_FILENAME } from '../constants';
-import { defaultConfig } from '../../shared/constants';
+import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
 
 // --- Base State Atoms ---
 export const specContentAtom = atom<string>('');
 export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
 export const configAtom = atom(defaultConfig);
-export const outputFormatAtom = atom<OutputFormat>('markdown');
+export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
 
 // --- Derived/Async State Atoms ---
 export const outputAtom = atom<string>('');

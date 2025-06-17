@@ -5,6 +5,8 @@ import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
 import { resolve } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { API_PORT } from '../shared/constants';
+import { USER_AGENT } from './constants';
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -99,7 +101,7 @@ export const app = new Elysia()
         }
       }
 
-      const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
+      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
       
       if (!response.ok) {
         // Pass through the status code from the remote server if it's an error
@@ -272,6 +274,6 @@ export const app = new Elysia()
 export type App = typeof app;
 
 if (import.meta.main) {
-  app.listen(3000);
+  app.listen(API_PORT);
   console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 }
