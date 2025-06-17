@@ -1,8 +1,8 @@
-import type { OutputFormat } from '../types';
 import { formatAsJson } from './json.ts';
 import { formatAsYaml } from './yaml.ts';
 import { formatAsXml } from './xml.ts';
 import { formatAsMarkdown } from './markdown.ts';
+import type { OutputFormat } from '../types.ts';
 
 export interface Formatter {
   format: (data: any) => string;
