@@ -173,3 +173,10 @@ PROPS:
 
 
 ------------------------------
+
+fix bug
+
+1. the program doesnt work when rechanging transformation config from frontend after previous transformation.
+2. the fullscreen should be triggered at scroll down of code output. not directly after processed.
+3. the condense button is hidden at bottom viewport cannot be scrolled while on long code output.
+4. the action button should active after data ready.
