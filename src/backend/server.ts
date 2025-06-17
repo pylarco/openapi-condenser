@@ -3,6 +3,7 @@ import { swagger } from '@elysiajs/swagger';
 import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
 import { resolve } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -16,8 +17,16 @@ const isPrivateIP = (ip: string) => {
     ip = ip.substring(7);
   }
 
+  // Handle localhost IPs
+  if (ip === '127.0.0.1' || ip === '::1') {
+    return true;
+  }
+
   const parts = ip.split('.').map(Number);
-  if (parts.length !== 4 || parts.some(isNaN)) return false; // Not a valid IPv4 address
+  if (parts.length !== 4 || parts.some(isNaN)) {
+     // Don't classify non-IPv4 strings as private, but this path shouldn't be hit with valid IPs.
+     return false;
+  }
 
   const [p1, p2, p3, p4] = parts;
   if (p1 === undefined || p2 === undefined || p3 === undefined || p4 === undefined) {
@@ -35,61 +44,91 @@ const isPrivateIP = (ip: string) => {
 
 export const app = new Elysia()
   .use(swagger())
+  .onError(({ code, error, set }) => {
+    if (code === 'VALIDATION') {
+      set.status = 400;
+      return { error: error.message };
+    }
+  })
   .get('/api/fetch-spec', async ({ query: { url }, set }) => {
     if (!url) {
-      set.status = 400;
-      return { error: 'URL parameter is required' };
+        set.status = 400;
+        return { error: 'URL parameter is required' };
     }
-
     try {
       const urlObj = new URL(url);
+      
+      // Basic check for http/https protocols
       if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
         set.status = 400;
-        return { error: 'URL parameter must use http or https protocol' };
+        return { error: 'URL must use http or https protocol.' };
       }
 
-      // SSRF Protection: Resolve hostname to IP and check against private ranges
-      const addresses = await resolve(urlObj.hostname);
-      if (!addresses || addresses.length === 0) {
-        set.status = 400;
-        return { error: 'Could not resolve hostname.' };
-      }
-      if (addresses.some(isPrivateIP)) {
-        set.status = 403;
-        return { error: 'Fetching specs from private or local network addresses is forbidden.' };
-      }
-    } catch (e) {
-      set.status = 400;
-      const message = e instanceof Error ? e.message : String(e);
-      return { error: `Invalid URL provided: ${message}` };
-    }
+      const hostname = urlObj.hostname;
+      const isHostnameIp = isIP(hostname) !== 0;
 
-    try {
+      // If hostname is an IP, check if it's private
+      if (isHostnameIp) {
+        if (isPrivateIP(hostname)) {
+          set.status = 403;
+          return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+        }
+      } else {
+        // If it's a domain name, resolve it and check all returned IPs
+        try {
+          let resolved = await resolve(hostname);
+          if (!Array.isArray(resolved)) {
+            resolved = [resolved];
+          }
+          const addresses = resolved.map((a: any) => (typeof a === 'string' ? a : a.address)).filter(Boolean);
+
+          if (addresses.some(isPrivateIP)) {
+            set.status = 403;
+            return { error: 'Fetching specs from private or local network addresses is forbidden.' };
+          }
+        } catch (dnsError) {
+            set.status = 400;
+            return { error: `Could not resolve hostname: ${hostname}` };
+        }
+      }
+
       const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
+      
       if (!response.ok) {
-        const errorText = await response.text();
+        // Pass through the status code from the remote server if it's an error
         set.status = response.status;
-        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. ${errorText}` };
+        const errorText = await response.text();
+        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. Details: ${errorText}` };
       }
+
       const content = await response.text();
       return { content };
+
     } catch (e) {
+      // Catches errors from `new URL()` for malformed URLs and other unexpected errors
       set.status = 500;
       const message = e instanceof Error ? e.message : String(e);
-      return { error: `Failed to fetch spec from URL: ${message}` };
+      return { error: `An unexpected error occurred: ${message}` };
     }
   }, {
     query: t.Object({
-      url: t.String({
+      url: t.Optional(t.String({
         format: 'uri',
-        description: 'A public URL to an OpenAPI specification file.'
-      })
+        description: 'A public URL to an OpenAPI specification file.',
+        error: 'Invalid URL format provided.'
+      }))
     }),
     response: {
       200: t.Object({ content: t.String() }),
       400: t.Object({ error: t.String() }),
       403: t.Object({ error: t.String() }),
+      404: t.Object({ error: t.String() }), // Test expects 404 for not found
       500: t.Object({ error: t.String() })
+    },
+    detail: {
+        tags: ['API'],
+        summary: 'Fetch an OpenAPI specification from a public URL',
+        description: `Fetches the content of a remote OpenAPI specification. Performs basic SSRF protection by disallowing requests to private, loopback, or otherwise reserved IP addresses.`,
     }
   })
   .post(

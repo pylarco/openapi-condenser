@@ -7,6 +7,7 @@ import { sampleSpec } from '../test.util';
 
 // Using a real public spec for fetch tests
 const publicSpecUrl = 'https://petstore3.swagger.io/api/v3/openapi.json';
+const nonExistentUrl = 'https://example.com/non-existent-spec.json';
 
 describe('E2E API Tests', () => {
   let server: ReturnType<typeof app.listen>;
@@ -42,7 +43,7 @@ describe('E2E API Tests', () => {
 
     it('should return 400 for a missing URL parameter', async () => {
         // @ts-expect-error - testing invalid input
-        const { error, status } = await api['api']['fetch-spec'].get({ query: {} });
+        const { data, error, status } = await api['api']['fetch-spec'].get({ query: {} });
         expect(status).toBe(400);
         if (error?.value && 'error' in error.value) {
             expect(error.value.error).toBe('URL parameter is required');
@@ -55,7 +56,7 @@ describe('E2E API Tests', () => {
         const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'not-a-url' } });
         expect(status).toBe(400);
         if (error?.value && 'error' in error.value) {
-            expect(error.value.error).toStartWith('Invalid URL provided');
+            expect(error.value.error).toInclude('Invalid URL');
         } else {
             throw new Error('Unexpected error response format');
         }
@@ -72,7 +73,6 @@ describe('E2E API Tests', () => {
     });
 
     it('should handle non-existent remote files gracefully', async () => {
-        const nonExistentUrl = 'https://example.com/non-existent-spec.json';
         const { error, status } = await api['api']['fetch-spec'].get({ query: { url: nonExistentUrl } });
         expect(status).toBe(404);
         if (error?.value && 'error' in error.value) {
