@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import type { FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
 import { ConfigPanel } from './components/ConfigPanel';
 import { InputPanel } from './components/InputPanel';
@@ -45,6 +45,10 @@ export default function App() {
   const setFileName = useCallback((name: string) => {
     fileNameRef.current = name;
   }, []);
+  
+  const setOutputFormatCallback = useCallback((format: OutputFormat) => {
+    setOutputFormat(format);
+  }, []);
 
   const handleCondense = useCallback(async () => {
     if (!specContentRef.current) {
@@ -86,7 +90,38 @@ export default function App() {
       } else if (data) {
         setOutput(data.data);
         if (data.stats) {
-          setStats(data.stats);
+          // Ensure stats values are valid numbers, especially for markdown mode
+          const normalizeStats = (stats: any) => {
+            if (!stats) return stats;
+            
+            // Process 'before' stats
+            if (stats.before) {
+              stats.before = {
+                paths: Number(stats.before.paths) || 0,
+                operations: Number(stats.before.operations) || 0,
+                schemas: Number(stats.before.schemas) || 0,
+                charCount: Number(stats.before.charCount) || 0,
+                lineCount: Number(stats.before.lineCount) || 0,
+                tokenCount: Number(stats.before.tokenCount) || 0,
+              };
+            }
+            
+            // Process 'after' stats
+            if (stats.after) {
+              stats.after = {
+                paths: Number(stats.after.paths) || 0,
+                operations: Number(stats.after.operations) || 0,
+                schemas: Number(stats.after.schemas) || 0,
+                charCount: Number(stats.after.charCount) || 0,
+                lineCount: Number(stats.after.lineCount) || 0,
+                tokenCount: Number(stats.after.tokenCount) || 0,
+              };
+            }
+            
+            return stats;
+          };
+          
+          setStats(normalizeStats(data.stats));
         }
       }
     } catch (err) {
@@ -95,6 +130,9 @@ export default function App() {
 
     setIsLoading(false);
   }, [config, outputFormat]);
+  
+  // Use memoized config to prevent unnecessary re-renders
+  const memoizedConfig = useMemo(() => config, [config]);
   
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
@@ -117,10 +155,10 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-4 xl:col-span-3">
             <ConfigPanel 
-              config={config} 
+              config={memoizedConfig} 
               setConfig={setConfig} 
               outputFormat={outputFormat}
-              setOutputFormat={setOutputFormat}
+              setOutputFormat={setOutputFormatCallback}
               onCondense={handleCondense}
               isLoading={isLoading}
             />

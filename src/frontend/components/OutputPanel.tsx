@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { OutputFormat } from '../../backend/types';
@@ -41,28 +41,38 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
     }
   }, [copyStatus]);
 
+  // Check if we need to automatically go fullscreen
   useEffect(() => {
+    if (!output) return;
+    
     const lineCount = output.split('\n').length;
-    const container = scrollContainerRef.current;
-
-    if (lineCount > 100 && container) {
-      const handleScroll = () => {
-        // Trigger fullscreen on first scroll action
-        if (container.scrollTop > 0 && !isFullScreen) {
-          setIsFullScreen(true);
-        }
-      };
-      container.addEventListener('scroll', handleScroll, { once: true });
-      return () => container.removeEventListener('scroll', handleScroll);
+    if (lineCount > 100) {
+      setIsFullScreen(true);
     }
+  }, [output]);
+
+  // Setup scroll listener for fullscreen mode
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || isFullScreen) return;
+
+    const handleScroll = () => {
+      // If user starts scrolling and we have lots of content, go fullscreen
+      if (container.scrollTop > 20 && output.split('\n').length > 30) {
+        setIsFullScreen(true);
+      }
+    };
+    
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
   }, [output, isFullScreen]);
 
-  const handleCopy = () => {
+  const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(output);
     setCopyStatus('Copied!');
-  };
+  }, [output]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     const blob = new Blob([output], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -72,7 +82,11 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
+  }, [output, format]);
+  
+  const handleToggleFullscreen = useCallback(() => {
+    setIsFullScreen(prev => !prev);
+  }, []);
   
   const panelClasses = isFullScreen 
     ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
@@ -83,7 +97,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
       <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
         <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
         <div className="flex items-center gap-2">
-            <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
+            <button onClick={handleToggleFullscreen} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
                 {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
             </button>
             {output && !isLoading && (

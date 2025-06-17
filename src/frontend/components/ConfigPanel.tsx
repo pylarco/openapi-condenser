@@ -13,7 +13,7 @@ interface ConfigPanelProps {
 const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
     <div className="relative flex items-center group">
       {children}
-      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50">
+      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-[1000]">
         {text}
       </div>
     </div>
@@ -26,7 +26,7 @@ const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title
   </div>
 );
 
-const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = ({ label, checked, onChange, tooltip }) => (
+const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => (
     <label className="flex items-center justify-between cursor-pointer">
         <span className="text-sm text-slate-300 flex items-center gap-2">
             {label}
@@ -42,9 +42,9 @@ const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: bo
         <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${checked ? 'transform translate-x-4' : ''}`}></div>
       </div>
     </label>
-);
+));
 
-const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = ({ label, value, onChange, placeholder, tooltip }) => (
+const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => (
     <div>
         <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
             {label}
@@ -62,7 +62,7 @@ const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange
             className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
         />
     </div>
-);
+));
 
 
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, outputFormat, setOutputFormat, onCondense, isLoading }) => {

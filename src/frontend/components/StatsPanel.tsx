@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { SpecStats } from '../../backend/types';
 
 interface StatsPanelProps {
@@ -30,6 +30,25 @@ const StatItem: React.FC<{ label: string; before: number; after: number }> = ({ 
 
 export const StatsPanel: React.FC<StatsPanelProps> = ({ stats }) => {
   if (!stats) return null;
+  
+  // Ensure stats values are numbers for accurate calculations
+  const normalizedStats = useMemo(() => {
+    const normalize = (stat: SpecStats): SpecStats => {
+      return {
+        paths: Number(stat.paths) || 0,
+        operations: Number(stat.operations) || 0,
+        schemas: Number(stat.schemas) || 0,
+        charCount: Number(stat.charCount) || 0,
+        lineCount: Number(stat.lineCount) || 0,
+        tokenCount: Number(stat.tokenCount) || 0
+      };
+    };
+    
+    return {
+      before: normalize(stats.before),
+      after: normalize(stats.after)
+    };
+  }, [stats]);
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
@@ -43,14 +62,14 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ stats }) => {
         </div>
       </div>
       <div className="divide-y divide-slate-700/50">
-        <StatItem label="Paths" before={stats.before.paths} after={stats.after.paths} />
-        <StatItem label="Operations" before={stats.before.operations} after={stats.after.operations} />
-        <StatItem label="Schemas" before={stats.before.schemas} after={stats.after.schemas} />
+        <StatItem label="Paths" before={normalizedStats.before.paths} after={normalizedStats.after.paths} />
+        <StatItem label="Operations" before={normalizedStats.before.operations} after={normalizedStats.after.operations} />
+        <StatItem label="Schemas" before={normalizedStats.before.schemas} after={normalizedStats.after.schemas} />
       </div>
       <div className="divide-y divide-slate-700/50 pt-2 mt-2 border-t border-slate-700/50">
-        <StatItem label="Characters" before={stats.before.charCount} after={stats.after.charCount} />
-        <StatItem label="Lines" before={stats.before.lineCount} after={stats.after.lineCount} />
-        <StatItem label="Tokens (est.)" before={stats.before.tokenCount} after={stats.after.tokenCount} />
+        <StatItem label="Characters" before={normalizedStats.before.charCount} after={normalizedStats.after.charCount} />
+        <StatItem label="Lines" before={normalizedStats.before.lineCount} after={normalizedStats.after.lineCount} />
+        <StatItem label="Tokens (est.)" before={normalizedStats.before.tokenCount} after={normalizedStats.after.tokenCount} />
       </div>
     </div>
   );

@@ -1,10 +1,22 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { client } from '../client';
 
 interface InputPanelProps {
   setSpecContent: (content: string) => void;
   setFileName: (name: string) => void;
 }
+
+// Use memo to prevent unnecessary re-renders
+const TabButton = memo<{tab: 'paste' | 'upload' | 'url', activeTab: 'paste' | 'upload' | 'url', onClick: (tab: 'paste' | 'upload' | 'url') => void, children: React.ReactNode}>(
+  ({ tab, activeTab, onClick, children }) => (
+    <button
+      onClick={() => onClick(tab)}
+      className={`px-4 py-2 text-sm font-medium transition ${activeTab === tab ? 'text-white bg-slate-700/50' : 'text-slate-400 hover:bg-slate-800/60'}`}
+    >
+      {children}
+    </button>
+  )
+);
 
 export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileName }) => {
   const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'url'>('paste');
@@ -39,6 +51,14 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
     setFetchError(null);
     setUploadedFileName(null);
   }, [setSpecContent, setFileName]);
+  
+  const handleTabClick = useCallback((tab: 'paste' | 'upload' | 'url') => {
+    setActiveTab(tab);
+  }, []);
+  
+  const handleUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setUrl(e.target.value);
+  }, []);
 
   useEffect(() => {
     const fetchSpecFromUrl = async () => {
@@ -96,25 +116,16 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
     }
   }, [url, activeTab, setSpecContent, setFileName]);
 
-  const handleUploadClick = () => {
+  const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
-  };
-
-  const TabButton: React.FC<{tab: 'paste' | 'upload' | 'url', children: React.ReactNode}> = ({ tab, children }) => (
-    <button
-      onClick={() => setActiveTab(tab)}
-      className={`px-4 py-2 text-sm font-medium transition ${activeTab === tab ? 'text-white bg-slate-700/50' : 'text-slate-400 hover:bg-slate-800/60'}`}
-    >
-      {children}
-    </button>
-  )
+  }, []);
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg overflow-hidden">
       <div className="flex border-b border-slate-700/50">
-        <TabButton tab="paste">Paste Spec</TabButton>
-        <TabButton tab="upload">Upload File</TabButton>
-        <TabButton tab="url">From URL</TabButton>
+        <TabButton tab="paste" activeTab={activeTab} onClick={handleTabClick}>Paste Spec</TabButton>
+        <TabButton tab="upload" activeTab={activeTab} onClick={handleTabClick}>Upload File</TabButton>
+        <TabButton tab="url" activeTab={activeTab} onClick={handleTabClick}>From URL</TabButton>
       </div>
       <div className="p-1">
         {activeTab === 'paste' && (
@@ -146,7 +157,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
                   id="url-input"
                   type="url"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={handleUrlChange}
                   placeholder="https://petstore3.swagger.io/api/v3/openapi.json"
                   className="w-full bg-slate-700/50 border border-slate-600 rounded-md pl-3 pr-10 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
                 />

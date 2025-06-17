@@ -3,3 +3,31 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Global performance optimizations */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Use GPU acceleration for certain animations */
+.transform,
+.transition-transform,
+.transition,
+.transition-all,
+.transition-opacity {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Optimize for scrolling performance */
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Optimize tooltips */
+[class*="z-"] {
+  transform: translateZ(0);
+}
