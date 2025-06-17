@@ -52,6 +52,9 @@ export type SpecStats = {
   paths: number;
   operations: number;
   schemas: number;
+  charCount: number;
+  lineCount: number;
+  tokenCount: number;
 };
 
 export type OpenAPIExtractorResult = {

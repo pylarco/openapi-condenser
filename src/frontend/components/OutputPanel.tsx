@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { OutputFormat } from '../../backend/types';
@@ -32,6 +32,7 @@ const SkeletonLoader = () => (
 export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, error, format }) => {
   const [copyStatus, setCopyStatus] = useState('Copy');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     if (copyStatus === 'Copied!') {
@@ -39,6 +40,22 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
       return () => clearTimeout(timer);
     }
   }, [copyStatus]);
+
+  useEffect(() => {
+    const lineCount = output.split('\n').length;
+    const container = scrollContainerRef.current;
+
+    if (lineCount > 100 && container) {
+      const handleScroll = () => {
+        // Trigger fullscreen on first scroll action
+        if (container.scrollTop > 0 && !isFullScreen) {
+          setIsFullScreen(true);
+        }
+      };
+      container.addEventListener('scroll', handleScroll, { once: true });
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [output, isFullScreen]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
@@ -58,7 +75,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
   }
   
   const panelClasses = isFullScreen 
-    ? "fixed inset-0 z-50 bg-slate-800 flex flex-col"
+    ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
     : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
 
   return (
@@ -77,7 +94,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
             )}
         </div>
       </div>
-      <div className="flex-grow p-1 relative overflow-auto">
+      <div ref={scrollContainerRef} className="flex-grow p-1 relative overflow-auto">
         {isLoading && <SkeletonLoader />}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -88,7 +105,7 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, err
           </div>
         )}
         {!isLoading && !error && output && (
-            <SyntaxHighlighter language={languageMap[format]} style={vscDarkPlus} customStyle={{ background: 'transparent', margin: 0, padding: '1rem', height: isFullScreen ? '100%' : 'auto', minHeight: '100%' }} codeTagProps={{style:{fontFamily: 'monospace'}}} wrapLines={true} showLineNumbers>
+            <SyntaxHighlighter language={languageMap[format]} style={vscDarkPlus} customStyle={{ background: 'transparent', margin: 0, padding: '1rem', height: '100%', minHeight: '100%' }} codeTagProps={{style:{fontFamily: 'monospace'}}} wrapLines={true} showLineNumbers>
                 {output}
             </SyntaxHighlighter>
         )}

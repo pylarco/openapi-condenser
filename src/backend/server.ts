@@ -112,7 +112,12 @@ export const app = new Elysia()
       return { content };
 
     } catch (e) {
-      // Catches errors from `new URL()` for malformed URLs and other unexpected errors
+      if (e instanceof TypeError && e.message.includes('Invalid URL')) {
+        set.status = 400;
+        return { error: `Invalid URL provided: ${url}` };
+      }
+      
+      // Catches other unexpected errors
       set.status = 500;
       const message = e instanceof Error ? e.message : String(e);
       return { error: `An unexpected error occurred: ${message}` };
@@ -120,7 +125,6 @@ export const app = new Elysia()
   }, {
     query: t.Object({
       url: t.Optional(t.String({
-        format: 'uri',
         description: 'A public URL to an OpenAPI specification file.',
         error: 'Invalid URL format provided.'
       }))
@@ -175,7 +179,7 @@ export const app = new Elysia()
       }
 
       // Ensure we have stats with the expected structure
-      const defaultStats: SpecStats = { paths: 0, operations: 0, schemas: 0 };
+      const defaultStats: SpecStats = { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
       const stats = result.stats || { before: defaultStats, after: defaultStats };
 
       return {
@@ -243,8 +247,8 @@ export const app = new Elysia()
           success: t.Literal(true),
           data: t.String(),
           stats: t.Object({
-            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
-            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
+            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number(), charCount: t.Number(), lineCount: t.Number(), tokenCount: t.Number() }),
+            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number(), charCount: t.Number(), lineCount: t.Number(), tokenCount: t.Number() }),
           }),
           warnings: t.Optional(t.Array(t.String())),
         }),

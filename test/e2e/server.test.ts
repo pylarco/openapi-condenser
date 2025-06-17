@@ -30,6 +30,7 @@ describe('E2E API Tests', () => {
   describe('/api/fetch-spec', () => {
     it('should fetch a valid remote OpenAPI spec', async () => {
       const { data, error, status } = await api['api']['fetch-spec'].get({
+        // @ts-ignore
         query: { url: publicSpecUrl },
       });
 
@@ -125,7 +126,7 @@ describe('E2E API Tests', () => {
         expect(data?.data).toBeString();
         expect(data?.data).toStartWith('# Sample API');
         expect(data?.data).toInclude('## Endpoints');
-        expect(data?.data).toInclude('### /users');
+        expect(data?.data).toInclude('### `GET` /users');
     });
 
     it('should filter paths based on include glob pattern', async () => {
@@ -143,6 +144,7 @@ describe('E2E API Tests', () => {
         // Check stats
         expect(data?.stats.before.paths).toBe(4);
         expect(data?.stats.after.paths).toBe(1);
+        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
     });
     
     it('should filter paths based on exclude glob pattern', async () => {
@@ -160,6 +162,7 @@ describe('E2E API Tests', () => {
         // Check stats
         expect(data?.stats.before.paths).toBe(4);
         expect(data?.stats.after.paths).toBe(3);
+        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
     });
 
     it('should filter by tags', async () => {

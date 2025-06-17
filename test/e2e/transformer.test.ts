@@ -142,15 +142,17 @@ describe('Complex Transformer and Stats Validation', () => {
     const result: OpenAPIExtractorResult = await extractOpenAPI(config);
 
     expect(result.success).toBe(true);
-    if (!result.success) return;
+    if (!result.success || !result.stats) return;
 
     const transformedSpec = JSON.parse(result.data as string);
     
     // 1. Validate Stats
-    expect(result.stats?.before.operations).toBe(3);
-    expect(result.stats?.before.schemas).toBe(5);
-    expect(result.stats?.after.operations).toBe(2); // get user, create tag
-    expect(result.stats?.after.schemas).toBe(4);   // User, UserProfile, Avatar, Tag (Post should be removed)
+    expect(result.stats.before.operations).toBe(3);
+    expect(result.stats.before.schemas).toBe(5);
+    expect(result.stats.after.operations).toBe(2); // get user, create tag
+    expect(result.stats.after.schemas).toBe(4);   // User, UserProfile, Avatar, Tag (Post should be removed)
+    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
+    expect(result.stats.after.tokenCount).toBeLessThan(result.stats.before.tokenCount);
 
     // 2. Validate Path Filtering
     expect(transformedSpec.paths['/users/{id}']).toBeDefined();
@@ -236,7 +238,7 @@ describe('Complex Transformer and Stats Validation', () => {
 
     const result = await extractOpenAPI(config);
     expect(result.success).toBe(true);
-    if(!result.success) return;
+    if(!result.success || !result.stats) return;
 
     const spec = JSON.parse(result.data as string);
 
@@ -258,7 +260,8 @@ describe('Complex Transformer and Stats Validation', () => {
     expect(spec.components.schemas.Inventory).toBeDefined(); // Kept because /inventory is kept
 
     // 4. Stats assertions
-    expect(result.stats?.before.operations).toBe(4);
-    expect(result.stats?.after.operations).toBe(2); // /products -> get, /inventory -> get
+    expect(result.stats.before.operations).toBe(4);
+    expect(result.stats.after.operations).toBe(2); // /products -> get, /inventory -> get
+    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
   });
-}); 
+});

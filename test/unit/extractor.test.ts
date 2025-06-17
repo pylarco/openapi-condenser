@@ -4,8 +4,12 @@ import { calculateStats } from '../../src/backend/extractor';
 describe('extractor.ts unit tests', () => {
     describe('calculateStats', () => {
         it('should return zero for an empty or invalid spec', () => {
-            expect(calculateStats(null)).toEqual({ paths: 0, operations: 0, schemas: 0 });
-            expect(calculateStats({})).toEqual({ paths: 0, operations: 0, schemas: 0 });
+            expect(calculateStats(null)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
+            const emptyStats = calculateStats({});
+            expect(emptyStats.paths).toBe(0);
+            expect(emptyStats.operations).toBe(0);
+            expect(emptyStats.schemas).toBe(0);
+            expect(emptyStats.charCount).toBe(2); // {}
         });
 
         it('should correctly count paths, operations, and schemas', () => {
@@ -34,7 +38,12 @@ describe('extractor.ts unit tests', () => {
                 }
             };
             const stats = calculateStats(spec);
-            expect(stats).toEqual({ paths: 3, operations: 6, schemas: 2 });
+            expect(stats.paths).toBe(3);
+            expect(stats.operations).toBe(6);
+            expect(stats.schemas).toBe(2);
+            expect(stats.charCount).toBeGreaterThan(100);
+            expect(stats.lineCount).toBeGreaterThan(10);
+            expect(stats.tokenCount).toBeGreaterThan(25);
         });
 
         it('should handle paths with no valid methods', () => {
@@ -48,7 +57,9 @@ describe('extractor.ts unit tests', () => {
                 components: {}
             };
             const stats = calculateStats(spec);
-            expect(stats).toEqual({ paths: 1, operations: 0, schemas: 0 });
+            expect(stats.paths).toBe(1);
+            expect(stats.operations).toBe(0);
+            expect(stats.schemas).toBe(0);
         });
     });
-}); 
+});

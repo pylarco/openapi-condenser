@@ -63,3 +63,10 @@ the project is not production ready yet, as;
 5. FE: no tooltip on each configs to show examples on hover 
 6. FE: need cool loading
 7. FE BE: need elysia swagger plugin so user from frontend can navigate to the swagger page also.
+
+-------------------------------
+
+   1. FE: tooltip hover should be on top layer above right side content
+   2. FE: performance is so slow and lagging even on changing toggle
+   3. FE: should auto fullscreen while user scrolling down at lines more than 100
+   4. stats is not accurate like not working at all especially on markdown mode

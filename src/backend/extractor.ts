@@ -7,8 +7,18 @@ import { join, dirname } from 'node:path';
 
 export const calculateStats = (spec: any): SpecStats => {
   if (!spec || typeof spec !== 'object') {
-    return { paths: 0, operations: 0, schemas: 0 };
+    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
   }
+
+  const specString = JSON.stringify(spec);
+  const prettySpecString = JSON.stringify(spec, null, 2);
+
+  const charCount = specString.length;
+  const lineCount = prettySpecString.split('\n').length;
+  // Rough approximation of token count, as it varies by model.
+  // 1 token is roughly 4 characters for English text.
+  const tokenCount = Math.ceil(charCount / 4);
+
   const validMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
   const paths = Object.keys(spec.paths || {});
   const operations = paths.reduce((count, path) => {
@@ -24,6 +34,9 @@ export const calculateStats = (spec: any): SpecStats => {
     paths: paths.length,
     operations: operations,
     schemas: schemas.length,
+    charCount,
+    lineCount,
+    tokenCount,
   };
 };
 

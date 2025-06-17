@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
 import { ConfigPanel } from './components/ConfigPanel';
 import { InputPanel } from './components/InputPanel';
@@ -28,8 +28,9 @@ type Stats = {
 }
 
 export default function App() {
-  const [specContent, setSpecContent] = useState('');
-  const [fileName, setFileName] = useState('spec.json');
+  const specContentRef = useRef('');
+  const fileNameRef = useRef('spec.json');
+  
   const [config, setConfig] = useState(defaultConfig);
   const [outputFormat, setOutputFormat] = useState<OutputFormat>('markdown');
   const [output, setOutput] = useState('');
@@ -37,8 +38,16 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
 
+  const setSpecContent = useCallback((content: string) => {
+    specContentRef.current = content;
+  }, []);
+
+  const setFileName = useCallback((name: string) => {
+    fileNameRef.current = name;
+  }, []);
+
   const handleCondense = useCallback(async () => {
-    if (!specContent) {
+    if (!specContentRef.current) {
       setError('Please provide an OpenAPI specification.');
       return;
     }
@@ -49,8 +58,8 @@ export default function App() {
 
     const payload = {
       source: {
-        content: specContent,
-        path: fileName,
+        content: specContentRef.current,
+        path: fileNameRef.current,
         type: 'memory' as const
       },
       output: {
@@ -76,14 +85,16 @@ export default function App() {
         setError(errorMessage);
       } else if (data) {
         setOutput(data.data);
-        setStats(data.stats);
+        if (data.stats) {
+          setStats(data.stats);
+        }
       }
     } catch (err) {
       setError(`Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     setIsLoading(false);
-  }, [specContent, fileName, config, outputFormat]);
+  }, [config, outputFormat]);
   
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
