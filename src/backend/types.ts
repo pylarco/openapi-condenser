@@ -46,9 +46,19 @@ export type ExtractorConfig = {
   };
 };
 
+export type SpecStats = {
+  paths: number;
+  operations: number;
+  schemas: number;
+};
+
 export type OpenAPIExtractorResult = {
   success: boolean;
   data?: any;
+  stats?: {
+    before: SpecStats;
+    after: SpecStats;
+  };
   warnings?: string[];
   errors?: string[];
 };

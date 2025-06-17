@@ -1,11 +1,52 @@
 import { Elysia, t } from 'elysia';
+import { swagger } from '@elysiajs/swagger';
 import { extractOpenAPI } from './backend/extractor';
 import type { ExtractorConfig } from './backend/types';
 
 const app = new Elysia()
+  .use(swagger())
+  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+    if (!url) {
+      set.status = 400;
+      return { error: 'URL parameter is required' };
+    }
+    try {
+      new URL(url); // Validate URL
+    } catch {
+      set.status = 400;
+      return { error: 'Invalid URL provided' };
+    }
+
+    try {
+      const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
+      if (!response.ok) {
+        const errorText = await response.text();
+        set.status = response.status;
+        return { error: `Failed to fetch spec from ${url}: ${response.statusText}. ${errorText}` };
+      }
+      const content = await response.text();
+      return { content };
+    } catch (e) {
+      set.status = 500;
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: `Failed to fetch spec from URL: ${message}` };
+    }
+  }, {
+    query: t.Object({
+      url: t.String({
+        format: 'uri',
+        description: 'A public URL to an OpenAPI specification file.'
+      })
+    }),
+    response: {
+      200: t.Object({ content: t.String() }),
+      400: t.Object({ error: t.String() }),
+      500: t.Object({ error: t.String() })
+    }
+  })
   .post(
     '/api/condense',
-    async ({ body }) => {
+    async ({ body, set }) => {
       const config: ExtractorConfig = {
         source: {
           type: 'memory',
@@ -22,7 +63,8 @@ const app = new Elysia()
       const result = await extractOpenAPI(config);
 
       if (!result.success) {
-        throw new Error(JSON.stringify(result));
+        set.status = 400;
+        return result;
       }
 
       return result;
@@ -72,6 +114,22 @@ const app = new Elysia()
           })
         ),
       }),
+      response: {
+        200: t.Object({
+          success: t.Literal(true),
+          data: t.String(),
+          stats: t.Object({
+            before: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
+            after: t.Object({ paths: t.Number(), operations: t.Number(), schemas: t.Number() }),
+          }),
+          warnings: t.Optional(t.Array(t.String())),
+        }),
+        400: t.Object({
+          success: t.Literal(false),
+          errors: t.Optional(t.Array(t.String())),
+          warnings: t.Optional(t.Array(t.String())),
+        })
+      }
     }
   )
   .listen(3000);

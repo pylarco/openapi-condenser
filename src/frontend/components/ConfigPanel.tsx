@@ -10,6 +10,15 @@ interface ConfigPanelProps {
   isLoading: boolean;
 }
 
+const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
+    <div className="relative flex items-center group">
+      {children}
+      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+        {text}
+      </div>
+    </div>
+  );
+
 const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
   <div className="mb-6">
     <h3 className="text-lg font-semibold text-white mb-3">{title}</h3>
@@ -17,9 +26,16 @@ const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title
   </div>
 );
 
-const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void }> = ({ label, checked, onChange }) => (
+const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = ({ label, checked, onChange, tooltip }) => (
     <label className="flex items-center justify-between cursor-pointer">
-      <span className="text-sm text-slate-300">{label}</span>
+        <span className="text-sm text-slate-300 flex items-center gap-2">
+            {label}
+            {tooltip && (
+                <Tooltip text={tooltip}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </Tooltip>
+            )}
+        </span>
       <div className="relative">
         <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
         <div className={`block w-10 h-6 rounded-full transition ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
@@ -28,13 +44,20 @@ const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: bo
     </label>
 );
 
-const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; }> = ({ label, value, onChange, placeholder }) => (
+const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = ({ label, value, onChange, placeholder, tooltip }) => (
     <div>
-        <label className="block text-sm text-slate-300 mb-1">{label}</label>
+        <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
+            {label}
+            {tooltip && (
+                <Tooltip text={tooltip}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </Tooltip>
+            )}
+        </label>
         <input 
             type="text"
             placeholder={placeholder}
-            value={value?.join(',')}
+            value={value?.join(', ')}
             onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()) : [])}
             className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
         />
@@ -72,17 +95,20 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, out
             placeholder="/users/**, /posts/*"
             value={config.filter.paths?.include}
             onChange={v => handleFilterChange('paths', { ...config.filter.paths, include: v })}
+            tooltip="Comma-separated list of glob patterns to include paths. e.g., /users/**"
         />
         <TextInput 
             label="Exclude Paths (glob)" 
             placeholder="/internal/**"
             value={config.filter.paths?.exclude}
             onChange={v => handleFilterChange('paths', { ...config.filter.paths, exclude: v })}
+            tooltip="Comma-separated list of glob patterns to exclude paths. e.g., /admin/**"
         />
         <Switch 
             label="Include Deprecated"
             checked={!!config.filter.includeDeprecated}
             onChange={v => handleFilterChange('includeDeprecated', v)}
+            tooltip="If checked, endpoints marked as 'deprecated' will be included."
         />
       </Section>
 
@@ -91,21 +117,25 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, out
             label="Remove Examples"
             checked={!!config.transform.removeExamples}
             onChange={v => handleTransformChange('removeExamples', v)}
+            tooltip="If checked, all 'example' and 'examples' fields will be removed."
         />
         <Switch 
             label="Remove Descriptions"
             checked={!!config.transform.removeDescriptions}
             onChange={v => handleTransformChange('removeDescriptions', v)}
+            tooltip="If checked, all 'description' fields will be removed."
         />
         <Switch 
             label="Include Servers"
             checked={!!config.transform.includeServers}
             onChange={v => handleTransformChange('includeServers', v)}
+            tooltip="If checked, the 'servers' block will be included."
         />
         <Switch 
             label="Include Info"
             checked={!!config.transform.includeInfo}
             onChange={v => handleTransformChange('includeInfo', v)}
+            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
         />
       </Section>
       

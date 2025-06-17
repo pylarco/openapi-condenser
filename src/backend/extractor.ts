@@ -1,9 +1,29 @@
-import type { ExtractorConfig, OpenAPIExtractorResult } from './types';
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
 import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
+
+const calculateStats = (spec: any): SpecStats => {
+  if (!spec || typeof spec !== 'object') {
+    return { paths: 0, operations: 0, schemas: 0 };
+  }
+  const paths = Object.keys(spec.paths || {});
+  const operations = paths.reduce((count, path) => {
+    if (spec.paths[path] && typeof spec.paths[path] === 'object') {
+      return count + Object.keys(spec.paths[path]).length;
+    }
+    return count;
+  }, 0);
+  const schemas = Object.keys(spec.components?.schemas || {});
+
+  return {
+    paths: paths.length,
+    operations: operations,
+    schemas: schemas.length,
+  };
+};
 
 /**
  * Extract OpenAPI information based on configuration
@@ -19,12 +39,16 @@ export const extractOpenAPI = async (
       return result;
     }
     
+    const beforeStats = calculateStats(result.data);
+
     // Apply transformations
     const transformed = transformOpenAPI(
       result.data,
       config.filter,
       config.transform
     );
+    
+    const afterStats = calculateStats(transformed);
     
     // Format output
     const formatter = getFormatter(config.output.format);
@@ -39,7 +63,11 @@ export const extractOpenAPI = async (
     
     return {
       success: true,
-      data: formattedOutput
+      data: formattedOutput,
+      stats: {
+        before: beforeStats,
+        after: afterStats,
+      }
     };
   } catch (error) {
     return {
