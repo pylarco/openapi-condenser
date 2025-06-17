@@ -1,4 +1,5 @@
+export * from './ActionPanel';
 export * from './config/ConfigPanel';
 export * from './input/InputPanel';
 export * from './output/OutputPanel';
-export * from './stats/StatsPanel'; 
+export * from './stats/StatsPanel';

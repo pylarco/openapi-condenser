@@ -1,4 +1,5 @@
 import {
+  ActionPanel,
   ConfigPanel,
   InputPanel,
   OutputPanel,
@@ -31,6 +32,7 @@ export default function App() {
 
           <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8">
             <InputPanel />
+            <ActionPanel />
             <StatsPanel />
             <OutputPanel />
           </div>
