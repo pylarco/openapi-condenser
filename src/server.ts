@@ -4,7 +4,13 @@ import { extractOpenAPI } from './backend/extractor';
 import type { ExtractorConfig } from './backend/types';
 
 const app = new Elysia()
-  .use(staticPlugin())
+  // Configure static plugin to serve frontend
+  .use(staticPlugin({
+    assets: '.',
+    prefix: '',
+    indexHTML: true,
+    ignorePatterns: [/^\/api.*$/]
+  }))
   .post(
     '/api/condense',
     async ({ body }) => {
@@ -53,7 +59,15 @@ const app = new Elysia()
                 include: t.Optional(t.Array(t.String())),
                 exclude: t.Optional(t.Array(t.String())),
             })),
-            methods: t.Optional(t.Array(t.String())),
+            methods: t.Optional(t.Array(t.Union([
+                t.Literal('get'),
+                t.Literal('post'),
+                t.Literal('put'),
+                t.Literal('delete'),
+                t.Literal('patch'),
+                t.Literal('options'),
+                t.Literal('head'),
+            ]))),
             includeDeprecated: t.Optional(t.Boolean()),
           })
         ),

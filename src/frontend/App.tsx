@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { client } from './client';
 import type { ExtractorConfig, FilterOptions, TransformOptions, OutputFormat } from '../backend/types';
 import { ConfigPanel } from './components/ConfigPanel';
@@ -53,7 +53,16 @@ export default function App() {
     const { data, error: apiError } = await client.api.condense.post(payload);
 
     if (apiError) {
-      setError(apiError.value.errors?.join('\n') || 'An unknown error occurred.');
+      try {
+        const parsedError = JSON.parse(apiError.value as any);
+        if (parsedError && parsedError.errors) {
+          setError(parsedError.errors.join('\\n'));
+        } else {
+          setError('An unknown error occurred.');
+        }
+      } catch (e) {
+        setError(String(apiError.value) || 'An unknown error occurred.');
+      }
     } else if (data) {
       setOutput(data.data as string);
     }
