@@ -1,7 +1,6 @@
 import { formatAsJson } from './json';
-import { formatAsYaml } from './yaml';
 import { formatAsXml } from './xml';
-import { formatAsMarkdown } from './markdown';
+import { formatAsConciseText } from './concise-text';
 import type { OutputFormat } from '../types';
 import { OpenAPIV3 } from 'openapi-types';
 
@@ -11,9 +10,9 @@ export interface Formatter {
 
 const formatters: Record<OutputFormat, Formatter> = {
   json: { format: formatAsJson },
-  yaml: { format: formatAsYaml },
+  yaml: { format: formatAsConciseText },
   xml: { format: formatAsXml },
-  markdown: { format: formatAsMarkdown },
+  markdown: { format: formatAsConciseText },
 };
 
 export const getFormatter = (format: OutputFormat): Formatter => {

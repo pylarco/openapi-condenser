@@ -1,261 +1,29 @@
-Of course. I made changes to four files to reduce code duplication and replace imperative `if/switch` statements with more declarative patterns.
+An analysis of your codebase has identified several opportunities for radical DRYing (Don't Repeat Yourself) to reduce code and lines of code (LOC) without affecting UI or functionality. The key changes involve consolidating formatters and co-locating tightly coupled components.
 
-Here is a summary of the changes:
+### Summary of Changes:
 
-### 1. New File: `src/backend/formatters/concise-text.ts`
+1.  **Backend Formatter Consolidation**:
+    *   The `yaml` and `markdown` formatters were functionally identical, both using the `concise-text` formatter. They have been removed, and the main formatter index now points directly to the `concise-text` formatter for both types. This eliminates two redundant files.
+    *   `src/backend/formatters/yaml.ts` -> Deleted
+    *   `src/backend/formatters/markdown.ts` -> Deleted
+    *   `src/backend/formatters/index.ts` -> Updated
 
-*   **Purpose:** I created this new file to abstract the shared logic from the `markdown.ts` and `yaml.ts` formatters, which were nearly identical. This new "concise text" formatter contains all the logic for generating the human-readable, LLM-friendly output format.
-*   **Key Improvement:** The `shortenContentType` helper function, which used a chain of `if` statements, was refactored to use a `ReadonlyArray` of mappings. This is a cleaner, more declarative lookup table.
+2.  **UI Component Co-location**:
+    *   The `StatItem` and `StatsHeader` components were only used within `StatsPanel`. They have been moved directly into `StatsPanel.tsx` as local components. This improves component encapsulation and reduces file clutter in the `ui` directory.
+    *   `src/frontend/components/ui/StatItem.tsx` -> Deleted
+    *   `src/frontend/components/ui/StatsHeader.tsx` -> Deleted
+    *   `src/frontend/components/features/stats/StatsPanel.tsx` -> Updated to include the moved components.
+    *   `src/frontend/components/ui/index.ts` -> Updated to remove exports for the deleted components.
 
-### 2. Modified File: `src/backend/formatters/index.ts`
+3.  **File Deletion**:
+    *   The file `src/backend/index.ts` was marked with a `//TODO: delete this file` comment and has been removed as requested.
 
-*   **Change:** The `getFormatter` function originally used a `switch` statement to return the correct formatter based on the `OutputFormat`.
-*   **Improvement:** I replaced the `switch` statement with a `Record<OutputFormat, Formatter>` (a dispatch map). This is a common and more professional pattern for such lookups, making the code cleaner and easier to extend.
+These changes result in a smaller, more maintainable codebase by removing unnecessary files and abstractions, directly addressing the goal of reducing code and LOC through aggressive DRY principles.
 
-### 3. Modified File: `src/backend/formatters/markdown.ts`
-
-*   **Change:** This file was completely simplified. All its previous logic was moved to the new `concise-text.ts` file.
-*   **Improvement:** It now just imports `formatAsConciseText` and re-exports it as `formatAsMarkdown`, eliminating significant code duplication.
-
-### 4. Modified File: `src/backend/formatters/yaml.ts`
-
-*   **Change:** Similar to the markdown formatter, this file was simplified by removing all its implementation details.
-*   **Improvement:** It now imports and re-exports the shared `formatAsConciseText` function, just like the markdown formatter. This ensures both formatters stay in sync and are maintained in a single place.
-
-Here is the code for the new and affected files:
-
-```typescript // src/backend/formatters/concise-text.ts
-import { OpenAPIV3 } from 'openapi-types';
-
-const resolveRef = <T extends object>(
-  refObj: OpenAPIV3.ReferenceObject | T,
-  doc: OpenAPIV3.Document,
-): T => {
-  if (!refObj || typeof refObj !== 'object' || !('$ref' in refObj))
-    return refObj as T;
-
-  const refPath = refObj.$ref.replace('#/components/', '').split('/');
-  let current: any = doc.components;
-  for (const part of refPath) {
-    current = current?.[part];
-  }
-  return (current || refObj) as T;
-};
-
-const formatSchemaType = (
-  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
-  doc: OpenAPIV3.Document,
-): string => {
-  if (!schema) return 'any';
-  if ('$ref' in schema) {
-    return schema.$ref.split('/').pop() || 'any';
-  }
-  if (schema.type === 'array' && schema.items) {
-    const itemType = formatSchemaType(schema.items, doc);
-    return `array<${itemType}>`;
-  }
-  return schema.type || 'any';
-};
-
-const contentTypeMappings: ReadonlyArray<[string, string]> = [
-    ['json', 'json'],
-    ['form-data', 'form-data'],
-    ['x-www-form-urlencoded', 'form-urlencoded'],
-    ['xml', 'xml'],
-    ['text/plain', 'text'],
-];
-
-const shortenContentType = (contentType: string): string => {
-    for (const [key, shortName] of contentTypeMappings) {
-        if (contentType.includes(key)) {
-            return shortName;
-        }
-    }
-    return contentType;
-};
-
-
-const formatProperties = (
-  properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
-  required: string[] | undefined,
-  doc: OpenAPIV3.Document,
-  indent = 0,
-): string => {
-  let propsMarkdown = '';
-  const indentStr = '  '.repeat(indent);
-
-  for (const [propName, propSchema] of Object.entries(properties)) {
-    const resolvedPropSchema = resolveRef(propSchema, doc);
-    const isRequired = required?.includes(propName);
-    const requiredStr = isRequired ? ' (required)' : '';
-    
-    const typeStr = formatSchemaType(propSchema, doc);
-    const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
-
-    propsMarkdown += `${indentStr}- ${propName}:${typeStr}${requiredStr}${descriptionStr}\n`;
-
-    let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
-    const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
-
-    if (resolvedPropSchema.type === 'object') {
-        nestedPropsSchema = resolvedPropSchema;
-    } else if (resolvedItems?.type === 'object') {
-        nestedPropsSchema = resolvedItems;
-    }
-
-    if (nestedPropsSchema?.properties) {
-        propsMarkdown += formatProperties(nestedPropsSchema.properties, nestedPropsSchema.required, doc, indent + 1);
-    }
-  }
-  return propsMarkdown;
-};
-
-const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    output += `${method.toUpperCase()} ${path}\n`;
-
-    const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
-    if (description) {
-      output += `D: ${description}\n`;
-    }
-
-    // Parameters
-    if (operation.parameters?.length) {
-      output += `P:\n`;
-      for (const paramRef of operation.parameters) {
-        const param = resolveRef(paramRef, data);
-        const schema = param.schema as OpenAPIV3.SchemaObject;
-        const type = schema ? formatSchemaType(schema, data) : 'any';
-        const required = param.required ? 'required' : 'optional';
-        const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `  - ${param.name}: ${type} (${param.in}, ${required})${paramDesc}\n`;
-      }
-    }
-    
-    // Request Body
-    if (operation.requestBody) {
-      const requestBody = resolveRef(operation.requestBody, data);
-      if (requestBody.content) {
-        const contentEntries = Object.entries(requestBody.content);
-        if (contentEntries.length > 0) {
-            const firstEntry = contentEntries[0];
-            if (firstEntry) {
-                const schemaName = formatSchemaType(firstEntry[1].schema, data);
-                if (contentEntries.length === 1) {
-                    output += `B: ${shortenContentType(firstEntry[0])} -> ${schemaName}\n`;
-                } else {
-                    output += `B:\n`;
-                    for (const [contentType, mediaType] of contentEntries) {
-                        output += `  - ${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}\n`;
-                    }
-                }
-            }
-        }
-      }
-    }
-
-    // Responses
-    if (operation.responses) {
-      output += `R:\n`;
-      const groupedResponses: { [key: string]: string[] } = {};
-      
-      for (const [code, responseRef] of Object.entries(operation.responses)) {
-        const response = resolveRef(responseRef, data);
-        const responseIdParts: string[] = [];
-        if (response.content) {
-            for (const [contentType, mediaType] of Object.entries(response.content)) {
-                responseIdParts.push(`${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}`);
-            }
-        }
-        
-        let responseId = responseIdParts.join(', ');
-        if (!responseId) {
-            responseId = response.description?.replace(/\n/g, ' ') || 'No description';
-        }
-
-        groupedResponses[responseId] = [...(groupedResponses[responseId] || []), code];
-      }
-
-      for (const [responseId, codes] of Object.entries(groupedResponses)) {
-           output += `  ${codes.join(', ')}: ${responseId}\n`;
-      }
-    }
-    return output;
-}
-
-const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    const schema = resolveRef(schemaRef, data);
-      
-    output += `SCHEMA: ${name}\n`;
-    if (schema.description) {
-        output += `D: ${schema.description.replace(/\n/g, ' ')}\n`;
-    }
-
-    if (schema.type === 'object' && schema.properties) {
-        output += 'PROPS:\n';
-        output += formatProperties(schema.properties, schema.required, data, 1);
-    } else if (schema.type === 'array' && schema.items) {
-        output += `ARRAY OF: ${formatSchemaType(schema.items, data)}\n`;
-        const resolvedItems = resolveRef(schema.items, data);
-        if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 1);
-        }
-    } else if (schema.type) {
-        output += `TYPE: ${schema.type}\n`;
-    }
-    return output;
-}
-
-/**
- * Format data as a concise text format for LLMs.
- */
-export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
-  const endpoints: string[] = [];
-  const schemas: string[] = [];
-  
-  // Endpoints
-  if (data.paths) {
-    for (const [path, pathItem] of Object.entries(data.paths)) {
-      if (!pathItem) continue;
-      
-      const validMethods = Object.keys(pathItem).filter(method => 
-        ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'].includes(method)
-      ) as (keyof typeof pathItem)[];
-
-      for (const method of validMethods) {
-        const operation = pathItem[method] as OpenAPIV3.OperationObject;
-        if (!operation || typeof operation !== 'object' || !('responses' in operation)) continue;
-        
-        endpoints.push(formatEndpoint(method, path, operation, data));
-      }
-    }
-  }
-
-  // Schemas
-  if (data.components?.schemas) {
-    for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
-        schemas.push(formatSchema(name, schemaRef, data));
-    }
-  }
-
-  let output = endpoints.join('\n');
-  
-  if (schemas.length > 0) {
-      if (output.length > 0) {
-        output += '\n---\n\n';
-      }
-      output += schemas.join('\n');
-  }
-  
-  return output.trim();
-};
-```
 ```typescript // src/backend/formatters/index.ts
 import { formatAsJson } from './json';
-import { formatAsYaml } from './yaml';
 import { formatAsXml } from './xml';
-import { formatAsMarkdown } from './markdown';
+import { formatAsConciseText } from './concise-text';
 import type { OutputFormat } from '../types';
 import { OpenAPIV3 } from 'openapi-types';
 
@@ -265,9 +33,9 @@ export interface Formatter {
 
 const formatters: Record<OutputFormat, Formatter> = {
   json: { format: formatAsJson },
-  yaml: { format: formatAsYaml },
+  yaml: { format: formatAsConciseText },
   xml: { format: formatAsXml },
-  markdown: { format: formatAsMarkdown },
+  markdown: { format: formatAsConciseText },
 };
 
 export const getFormatter = (format: OutputFormat): Formatter => {
@@ -278,19 +46,100 @@ export const getFormatter = (format: OutputFormat): Formatter => {
   return formatter;
 };
 ```
+
 ```typescript // src/backend/formatters/markdown.ts
-import { formatAsConciseText } from './concise-text';
-
-/**
- * Format data as a concise markdown format for LLMs.
- */
-export const formatAsMarkdown = formatAsConciseText;
+//TODO: delete this file
 ```
-```typescript // src/backend/formatters/yaml.ts
-import { formatAsConciseText } from './concise-text';
 
-/**
- * Format data as a concise YAML-like format for LLMs.
- */
-export const formatAsYaml = formatAsConciseText;
+```typescript // src/backend/formatters/yaml.ts
+//TODO: delete this file
+```
+
+```typescript // src/backend/index.ts
+//TODO: delete this file
+```
+
+```typescript // src/frontend/components/features/stats/StatsPanel.tsx
+import React from 'react';
+import { useAtomValue } from 'jotai';
+import { statsAtom } from '../../../state/atoms';
+
+const StatsHeader: React.FC = () => (
+  <div className="flex justify-between items-center text-xs text-slate-400 font-medium mb-2 px-2">
+    <span>Metric</span>
+    <div className="flex items-center gap-4 w-[320px] justify-end">
+      <span className="w-16 text-right">Before</span>
+      <span className="w-16 text-right">After</span>
+      <span className="w-32 text-right">Change / Reduction</span>
+    </div>
+  </div>
+);
+
+const StatItem: React.FC<{ label: string; before: number; after: number }> = ({ label, before, after }) => {
+  const reduction = before > 0 ? ((before - after) / before) * 100 : 0;
+  const reductionColor = reduction > 0 ? 'text-green-400' : reduction < 0 ? 'text-red-400' : 'text-slate-400';
+  const change = after - before;
+  const formatNumber = (num: number) => num.toLocaleString('en-US');
+
+  return (
+    <div className="flex justify-between items-center py-2">
+      <span className="text-slate-300">{label}</span>
+      <div className="flex items-center gap-4">
+        <span className="text-slate-400 tabular-nums w-16 text-right">{formatNumber(before)}</span>
+        <span className="text-xl font-bold text-white tabular-nums w-16 text-right">{formatNumber(after)}</span>
+        <span className={`text-sm font-medium w-32 text-right tabular-nums ${reductionColor}`}>
+          {change !== 0 ? `${change > 0 ? '+' : ''}${formatNumber(change)}` : ''} ({reduction.toFixed(0)}%)
+        </span>
+      </div>
+    </div>
+  );
+};
+
+
+export const StatsPanel: React.FC = () => {
+  const stats = useAtomValue(statsAtom);
+
+  if (!stats) return null;
+
+  const specStats = [
+    { label: 'Paths', before: stats.before.paths, after: stats.after.paths },
+    { label: 'Operations', before: stats.before.operations, after: stats.after.operations },
+    { label: 'Schemas', before: stats.before.schemas, after: stats.after.schemas },
+  ];
+
+  const contentStats = [
+    { label: 'Characters', before: stats.before.charCount, after: stats.after.charCount },
+    { label: 'Lines', before: stats.before.lineCount, after: stats.after.lineCount },
+    { label: 'Tokens (est.)', before: stats.before.tokenCount, after: stats.after.tokenCount },
+  ];
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
+      <h3 className="text-lg font-semibold text-white mb-4">Condensation Stats</h3>
+      <StatsHeader />
+      <div className="divide-y divide-slate-700/50">
+        {specStats.map(stat => <StatItem key={stat.label} {...stat} />)}
+      </div>
+      <div className="my-2 border-t border-slate-700/50" />
+      <div className="divide-y divide-slate-700/50">
+        {contentStats.map(stat => <StatItem key={stat.label} {...stat} />)}
+      </div>
+    </div>
+  );
+};
+```
+
+```typescript // src/frontend/components/ui/index.ts
+export * from './Tooltip';
+export * from './Section';
+export * from './Switch';
+export * from './TextInput';
+```
+
+```typescript // src/frontend/components/ui/StatItem.tsx
+//TODO: delete this file
+```
+
+```typescript // src/frontend/components/ui/StatsHeader.tsx
+//TODO: delete this file
 ```
