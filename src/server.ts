@@ -1,16 +1,8 @@
 import { Elysia, t } from 'elysia';
-import { staticPlugin } from '@elysiajs/static';
 import { extractOpenAPI } from './backend/extractor';
 import type { ExtractorConfig } from './backend/types';
 
 const app = new Elysia()
-  // Configure static plugin to serve frontend
-  .use(staticPlugin({
-    assets: '.',
-    prefix: '',
-    indexHTML: true,
-    ignorePatterns: [/^\/api.*$/]
-  }))
   .post(
     '/api/condense',
     async ({ body }) => {

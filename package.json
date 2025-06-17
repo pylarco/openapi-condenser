@@ -6,7 +6,7 @@
     "openapi-condenser": "src/cli.ts"
   },
   "scripts": {
-    "dev": "bun run src/server.ts",
+    "dev": "concurrently \"vite\" \"bun run src/server.ts\"",
     "start": "bun run src/server.ts",
     "build": "vite build",
     "cli": "bun run src/cli.ts"
@@ -19,6 +19,7 @@
     "@types/react-dom": "18.3.7",
     "@types/react-syntax-highlighter": "15.5.13",
     "@vitejs/plugin-react": "4.5.2",
+    "concurrently": "^9.1.2",
     "vite": "5.4.19"
   },
   "peerDependencies": {
