@@ -62,8 +62,8 @@ export const filterMethods = (
   filterOptions: FilterOptions
 ): Record<string, any> => {
   return Object.entries(methods).reduce((acc, [method, definition]) => {
-    // Skip if method is not in the filter list
-    if (filterOptions.methods && !filterOptions.methods.includes(method as any)) {
+    // Skip if method is not in the filter list, but only if the list has items.
+    if (filterOptions.methods && filterOptions.methods.length > 0 && !filterOptions.methods.includes(method as any)) {
       return acc;
     }
     
