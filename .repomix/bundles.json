@@ -1,0 +1,16 @@
+{
+  "bundles": {
+    "source-453": {
+      "name": "source",
+      "created": "2025-06-17T02:26:45.064Z",
+      "lastUsed": "2025-06-17T02:26:55.651Z",
+      "tags": [],
+      "files": [
+        "src",
+        "openapi-condenser.config.ts",
+        "package.json",
+        "tsconfig.json"
+      ]
+    }
+  }
+}

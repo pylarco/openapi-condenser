@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import { parse } from 'cmd-ts';
 import { command, option, string, boolean, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './src/extractor';
-import type { ExtractorConfig } from './src/types';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
+import type { ExtractorConfig } from './types';
 
 // Define CLI command
 const cmd = command({
