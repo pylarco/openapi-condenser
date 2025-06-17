@@ -20,11 +20,20 @@ export type TransformOptions = {
   includeInfo?: boolean;
 };
 
+export type Source =
+  | {
+      type: 'local' | 'remote';
+      path: string;
+      content?: undefined;
+    }
+  | {
+      type: 'memory';
+      path: string; // for determining parser, e.g., 'spec.json'
+      content: string;
+    };
+
 export type ExtractorConfig = {
-  source: {
-    type: 'local' | 'remote';
-    path: string;
-  };
+  source: Source;
   output: {
     format: OutputFormat;
     destination?: string;

@@ -1,27 +1,39 @@
 {
   "name": "openapi-condenser",
-  "main": "src/index.ts",
+  "main": "src/server.ts",
   "type": "module",
   "bin": {
-    "openapi-condenser": "src/index.ts"
+    "openapi-condenser": "src/cli.ts"
   },
-  "private": true,
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --watch src/index.ts"
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "build": "vite build",
+    "cli": "bun run src/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/micromatch": "^4.0.7",
-    "@types/node": "^20.10.5"
+    "@types/node": "20.19.1",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "@types/react-syntax-highlighter": "15.5.13",
+    "@vitejs/plugin-react": "4.5.2",
+    "vite": "5.4.19"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
-    "cmd-ts": "^0.13.0",
-    "fast-xml-parser": "^4.3.2",
+    "@elysiajs/eden": "0.8.1",
+    "@elysiajs/static": "0.8.1",
+    "cmd-ts": "0.13.0",
+    "elysia": "0.8.17",
+    "fast-xml-parser": "4.5.3",
     "micromatch": "^4.0.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-syntax-highlighter": "15.6.1",
     "yaml": "^2.3.4"
   }
 }

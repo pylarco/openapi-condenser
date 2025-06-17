@@ -1,23 +1,24 @@
 import { promises as fs } from 'node:fs';
 import { extname } from 'node:path';
 import YAML from 'yaml';
-import type { OpenAPIExtractorResult } from '../types';
+import type { OpenAPIExtractorResult, Source } from '../types';
 
 /**
- * Fetch OpenAPI spec from local file or remote URL
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
  */
 export const fetchSpec = async (
-  sourcePath: string, 
-  sourceType: 'local' | 'remote'
+  source: Source
 ): Promise<OpenAPIExtractorResult> => {
   try {
     let content: string;
     let contentType: string | null = null;
     
-    if (sourceType === 'local') {
-      content = await fs.readFile(sourcePath, 'utf-8');
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      content = await fs.readFile(source.path, 'utf-8');
     } else {
-      const response = await fetch(sourcePath);
+      const response = await fetch(source.path);
       if (!response.ok) {
         return {
           success: false,
@@ -28,7 +29,7 @@ export const fetchSpec = async (
       contentType = response.headers.get('Content-Type');
     }
     
-    const data = parseContent(content, sourcePath, contentType);
+    const data = parseContent(content, source.path, contentType);
     return {
       success: true,
       data,

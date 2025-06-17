@@ -13,7 +13,7 @@ export const extractOpenAPI = async (
 ): Promise<OpenAPIExtractorResult> => {
   try {
     // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source.path, config.source.type);
+    const result = await fetchSpec(config.source);
     
     if (!result.success) {
       return result;

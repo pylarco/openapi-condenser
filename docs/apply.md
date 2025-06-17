@@ -1,90 +1,81 @@
-Of course! I've reviewed your codebase and implemented several improvements to make it more robust, production-ready, and easier to use. Here are the key changes:
+Of course! I'd be happy to help you build a beautiful and cohesive web interface for your OpenAPI Condenser tool. This will involve creating a new frontend with React and Vite, and a backend server with ElysiaJS to power it, while refactoring the existing CLI logic to be reusable.
 
-1.  **Enhanced Filtering**: Replaced simple path and tag filters with powerful `include` and `exclude` glob patterns, giving you fine-grained control over your OpenAPI specification output.
-2.  **Improved Robustness**: Made the file parser smarter. It now checks the `Content-Type` header for remote URLs and has a fallback mechanism to try parsing as JSON or YAML if the file type is ambiguous.
-3.  **Bug Fixes & DRY Principles**:
-    *   Fixed a bug where command-line flags like `--include-deprecated` were ignored.
-    *   Refactored the transformation logic to correctly apply changes (like removing descriptions) across the entire document, not just in schemas.
-    *   Centralized and simplified filtering logic to be more maintainable.
-    *   Ensured configuration objects are not mutated, preventing unexpected side effects.
-4.  **Production Readiness**:
-    *   Added a `bin` entry to `package.json` so the tool can be used as a standard CLI command.
-    *   Corrected paths in `package.json` scripts.
-    *   Improved type safety and configuration structure.
+Here are the code changes to transform your tool into a full-fledged web application.
 
-Here are the complete code changes for the affected files:
+```typescript // index.html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenAPI Condenser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
+  </head>
+  <body class="bg-slate-900 text-slate-300">
+    <div id="root"></div>
+    <script type="module" src="/src/frontend/main.tsx"></script>
+  </body>
+</html>
+```
 
-```typescript // package.json
+```json // package.json
 {
   "name": "openapi-condenser",
-  "main": "src/index.ts",
+  "main": "src/server.ts",
   "type": "module",
   "bin": {
-    "openapi-condenser": "src/index.ts"
+    "openapi-condenser": "src/cli.ts"
   },
-  "private": true,
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --watch src/index.ts"
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "build": "vite build",
+    "cli": "bun run src/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/micromatch": "^4.0.7",
-    "@types/node": "^20.10.5"
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.46",
+    "@types/react-dom": "^18.2.28",
+    "@types/react-syntax-highlighter": "^15.5.11",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.10"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@elysiajs/eden": "^0.8.1",
+    "@elysiajs/static": "^0.8.1",
     "cmd-ts": "^0.13.0",
+    "elysia": "^0.8.9",
     "fast-xml-parser": "^4.3.2",
     "micromatch": "^4.0.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-syntax-highlighter": "^15.5.0",
     "yaml": "^2.3.4"
   }
 }
 ```
 
-```typescript // openapi-condenser.config.ts
-import type { ExtractorConfig } from './src/types';
-
-const config: ExtractorConfig = {
-  source: {
-    type: 'local',
-    path: './openapi.json', // Path to local file or remote URL
-  },
-  output: {
-    format: 'markdown', // 'json', 'yaml', 'xml', or 'markdown'
-    destination: './output', // Output directory or file
-  },
-  filter: {
-    paths: {
-      // e.g., include: ['/users/**', '/pets/**'],
-      // e.g., exclude: ['/users/{userId}/posts']
-    }, // Filter by paths using glob patterns
-    tags: {
-      // e.g., include: ['user', 'pet*'],
-      // e.g., exclude: ['internal']
-    }, // Filter by tags using glob patterns
-    methods: undefined, // Filter by HTTP methods
-    includeDeprecated: false, // Whether to include deprecated endpoints
-  },
-  transform: {
-    maxDepth: Infinity, // Maximum depth for schema extraction
-    removeExamples: false, // Whether to remove examples
-    removeDescriptions: false, // Whether to remove descriptions
-    includeServers: true, // Include server information
-    includeInfo: true, // Include API info (title, version, etc.)
-  },
-  validation: {
-    strict: true, // Enforce strict validation
-    ignoreErrors: [], // Error types to ignore
-  },
-};
-
-export default config;
-```
-
-```typescript // src/extractor.ts
+```typescript // src/backend/extractor.ts
 import type { ExtractorConfig, OpenAPIExtractorResult } from './types';
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
@@ -100,7 +91,7 @@ export const extractOpenAPI = async (
 ): Promise<OpenAPIExtractorResult> => {
   try {
     // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source.path, config.source.type);
+    const result = await fetchSpec(config.source);
     
     if (!result.success) {
       return result;
@@ -214,12 +205,156 @@ export const mergeWithCommandLineArgs = (
 };
 ```
 
-```typescript // src/index.ts
+```typescript // src/backend/index.ts
+//TODO: delete this file
+```
+
+```typescript // src/backend/types.ts
+export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
+
+export type FilterPatterns = {
+  include?: string[];
+  exclude?: string[];
+};
+
+export type FilterOptions = {
+  paths?: FilterPatterns;
+  tags?: FilterPatterns;
+  methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
+  includeDeprecated?: boolean;
+};
+
+export type TransformOptions = {
+  maxDepth?: number;
+  removeExamples?: boolean;
+  removeDescriptions?: boolean;
+  includeServers?: boolean;
+  includeInfo?: boolean;
+};
+
+export type Source =
+  | {
+      type: 'local' | 'remote';
+      path: string;
+      content?: undefined;
+    }
+  | {
+      type: 'memory';
+      path: string; // for determining parser, e.g., 'spec.json'
+      content: string;
+    };
+
+export type ExtractorConfig = {
+  source: Source;
+  output: {
+    format: OutputFormat;
+    destination?: string;
+  };
+  filter?: FilterOptions;
+  transform?: TransformOptions;
+  validation?: {
+    strict: boolean;
+    ignoreErrors?: string[];
+  };
+};
+
+export type OpenAPIExtractorResult = {
+  success: boolean;
+  data?: any;
+  warnings?: string[];
+  errors?: string[];
+};
+
+export type SchemaTransformer = (schema: any) => any;
+```
+
+```typescript // src/backend/utils/fetcher.ts
+import { promises as fs } from 'node:fs';
+import { extname } from 'node:path';
+import YAML from 'yaml';
+import type { OpenAPIExtractorResult, Source } from '../types';
+
+/**
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ */
+export const fetchSpec = async (
+  source: Source
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    let content: string;
+    let contentType: string | null = null;
+    
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      content = await fs.readFile(source.path, 'utf-8');
+    } else {
+      const response = await fetch(source.path);
+      if (!response.ok) {
+        return {
+          success: false,
+          errors: [`Failed to fetch remote spec: ${response.status} ${response.statusText}`]
+        };
+      }
+      content = await response.text();
+      contentType = response.headers.get('Content-Type');
+    }
+    
+    const data = parseContent(content, source.path, contentType);
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errors: [`Error processing spec: ${error instanceof Error ? error.message : String(error)}`]
+    };
+  }
+};
+
+/**
+ * Parse content based on file extension or content type, with fallback.
+ */
+export const parseContent = (content: string, source: string, contentType?: string | null): any => {
+  try {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content);
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content);
+      }
+    }
+
+    // 2. Try parsing based on file extension
+    const ext = extname(source).toLowerCase();
+    if (ext === '.json') {
+      return JSON.parse(content);
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content);
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content);
+    } catch (jsonError) {
+      return YAML.parse(content);
+    }
+  } catch (error) {
+    throw new Error(`Failed to parse content from '${source}'. Not valid JSON or YAML.`);
+  }
+};
+```
+
+```typescript // src/cli.ts
 #!/usr/bin/env bun
 import { parse } from 'cmd-ts';
-import { command, option, string, boolean, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig } from './types';
+import { command, option, string, optional, flag } from 'cmd-ts';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './backend/extractor';
+import type { ExtractorConfig } from './backend/types';
 
 // Define CLI command
 const cmd = command({
@@ -354,343 +489,521 @@ const cmd = command({
 await parse(cmd, process.argv.slice(2));
 ```
 
-```typescript // src/transformer.ts
-import type { FilterOptions, TransformOptions, SchemaTransformer, FilterPatterns } from './types';
-import micromatch from 'micromatch';
+```typescript // src/frontend/App.tsx
+import React, { useState, useCallback } from 'react';
+import { client } from './client';
+import type { ExtractorConfig, FilterOptions, TransformOptions, OutputFormat } from '../backend/types';
+import { ConfigPanel } from './components/ConfigPanel';
+import { InputPanel } from './components/InputPanel';
+import { OutputPanel } from './components/OutputPanel';
 
-/**
- * Checks if an endpoint's tags match the provided patterns.
- */
-function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): boolean {
-  const { include, exclude } = tagPatterns;
-
-  if (!include?.length && !exclude?.length) {
-    return true; // No tag filter, always matches
-  }
-  
-  // If endpoint has no tags, it cannot match an include filter.
-  if (!endpointTags.length) {
-    return !include?.length;
-  }
-  
-  const matchesInclude = include?.length ? micromatch.some(endpointTags, include) : true;
-  const matchesExclude = exclude?.length ? micromatch.some(endpointTags, exclude) : false;
-
-  return matchesInclude && !matchesExclude;
-}
-
-
-/**
- * Filter paths based on configuration
- */
-export const filterPaths = (
-  paths: Record<string, any>, 
-  filterOptions: FilterOptions
-): Record<string, any> => {
-  if (!filterOptions) return paths;
-  
-  const pathKeys = Object.keys(paths);
-  let filteredPathKeys = pathKeys;
-
-  if (filterOptions.paths?.include?.length) {
-    filteredPathKeys = micromatch(filteredPathKeys, filterOptions.paths.include, { dot: true });
-  }
-  if (filterOptions.paths?.exclude?.length) {
-    filteredPathKeys = micromatch.not(filteredPathKeys, filterOptions.paths.exclude, { dot: true });
-  }
-
-  return filteredPathKeys.reduce((acc, path) => {
-    const methods = paths[path];
-    const filteredMethods = filterMethods(methods, filterOptions);
-    
-    if (Object.keys(filteredMethods).length > 0) {
-      acc[path] = filteredMethods;
-    }
-    
-    return acc;
-  }, {} as Record<string, any>);
-};
-
-/**
- * Filter HTTP methods based on configuration
- */
-export const filterMethods = (
-  methods: Record<string, any>,
-  filterOptions: FilterOptions
-): Record<string, any> => {
-  return Object.entries(methods).reduce((acc, [method, definition]) => {
-    // Skip if method is not in the filter list
-    if (filterOptions.methods && !filterOptions.methods.includes(method as any)) {
-      return acc;
-    }
-    
-    // Skip deprecated endpoints if configured
-    if (!filterOptions.includeDeprecated && definition.deprecated) {
-      return acc;
-    }
-    
-    // Filter by tags
-    if (filterOptions.tags && !matchesTags(definition.tags, filterOptions.tags)) {
-      return acc;
-    }
-    
-    acc[method] = definition;
-    return acc;
-  }, {} as Record<string, any>);
-};
-
-/**
- * Transform OpenAPI schema based on configuration
- */
-export const transformSchema = (
-  schema: any,
-  transformOptions: TransformOptions,
-  currentDepth = 0
-): any => {
-  if (!schema || typeof schema !== 'object') {
-    return schema;
-  }
-  
-  // Handle maximum depth
-  if (transformOptions.maxDepth !== undefined && currentDepth >= transformOptions.maxDepth) {
-    if (Array.isArray(schema)) {
-      return schema.length > 0 ? ['...'] : [];
-    }
-    return { truncated: true, reason: `Max depth of ${transformOptions.maxDepth} reached` };
-  }
-  
-  // Handle arrays
-  if (Array.isArray(schema)) {
-    return schema.map(item => transformSchema(item, transformOptions, currentDepth + 1));
-  }
-  
-  // Handle objects
-  const result = { ...schema };
-  
-  // Remove examples if configured
-  if (transformOptions.removeExamples && 'example' in result) {
-    delete result.example;
-  }
-  if (transformOptions.removeExamples && 'examples' in result) {
-    delete result.examples;
-  }
-  
-  // Remove descriptions if configured
-  if (transformOptions.removeDescriptions && 'description' in result) {
-    delete result.description;
-  }
-  
-  // Process all properties recursively
-  Object.keys(result).forEach(key => {
-    if (typeof result[key] === 'object' && result[key] !== null) {
-      result[key] = transformSchema(result[key], transformOptions, currentDepth + 1);
-    }
-  });
-  
-  return result;
-};
-
-/**
- * Transform the entire OpenAPI document based on configuration
- */
-export const transformOpenAPI = (
-  openapi: any,
-  filterOpts?: FilterOptions,
-  transformOpts?: TransformOptions
-): any => {
-  // Create a deep copy to avoid mutating the original object
-  let result = JSON.parse(JSON.stringify(openapi));
-  
-  // Filter paths first
-  if (result.paths && filterOpts) {
-    result.paths = filterPaths(result.paths, filterOpts);
-  }
-  
-  // Then apply transformations on the filtered spec
-  if (transformOpts) {
-    if (!transformOpts.includeServers) {
-      delete result.servers;
-    }
-    if (!transformOpts.includeInfo) {
-      delete result.info;
-    }
-    // Apply recursive transformations to the entire document
-    result = transformSchema(result, transformOpts);
-  }
-
-  // A future improvement could be to remove unused components after path filtering.
-  
-  return result;
-};
-
-/**
- * Higher-order function for composing transformers
- */
-export const composeTransformers = 
-  (...transformers: SchemaTransformer[]): SchemaTransformer => 
-  (schema: any) => 
-    transformers.reduce((result, transformer) => transformer(result), schema);
-```
-
-```typescript // src/types.ts
-export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
-
-export type FilterPatterns = {
-  include?: string[];
-  exclude?: string[];
-};
-
-export type FilterOptions = {
-  paths?: FilterPatterns;
-  tags?: FilterPatterns;
-  methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
-  includeDeprecated?: boolean;
-};
-
-export type TransformOptions = {
-  maxDepth?: number;
-  removeExamples?: boolean;
-  removeDescriptions?: boolean;
-  includeServers?: boolean;
-  includeInfo?: boolean;
-};
-
-export type ExtractorConfig = {
-  source: {
-    type: 'local' | 'remote';
-    path: string;
-  };
-  output: {
-    format: OutputFormat;
-    destination?: string;
-  };
-  filter?: FilterOptions;
-  transform?: TransformOptions;
-  validation?: {
-    strict: boolean;
-    ignoreErrors?: string[];
-  };
-};
-
-export type OpenAPIExtractorResult = {
-  success: boolean;
-  data?: any;
-  warnings?: string[];
-  errors?: string[];
-};
-
-export type SchemaTransformer = (schema: any) => any;
-```
-
-```typescript // src/utils/fetcher.ts
-import { promises as fs } from 'node:fs';
-import { extname } from 'node:path';
-import YAML from 'yaml';
-import type { OpenAPIExtractorResult } from '../types';
-
-/**
- * Fetch OpenAPI spec from local file or remote URL
- */
-export const fetchSpec = async (
-  sourcePath: string, 
-  sourceType: 'local' | 'remote'
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    let content: string;
-    let contentType: string | null = null;
-    
-    if (sourceType === 'local') {
-      content = await fs.readFile(sourcePath, 'utf-8');
-    } else {
-      const response = await fetch(sourcePath);
-      if (!response.ok) {
-        return {
-          success: false,
-          errors: [`Failed to fetch remote spec: ${response.status} ${response.statusText}`]
-        };
-      }
-      content = await response.text();
-      contentType = response.headers.get('Content-Type');
-    }
-    
-    const data = parseContent(content, sourcePath, contentType);
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [`Error processing spec: ${error instanceof Error ? error.message : String(error)}`]
-    };
-  }
-};
-
-/**
- * Parse content based on file extension or content type, with fallback.
- */
-export const parseContent = (content: string, source: string, contentType?: string | null): any => {
-  try {
-    // 1. Try parsing based on content type for remote files
-    if (contentType) {
-      if (contentType.includes('json')) {
-        return JSON.parse(content);
-      }
-      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
-        return YAML.parse(content);
-      }
-    }
-
-    // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
-    if (ext === '.json') {
-      return JSON.parse(content);
-    }
-    if (ext === '.yaml' || ext === '.yml') {
-      return YAML.parse(content);
-    }
-    
-    // 3. Fallback: try parsing as JSON, then YAML
-    try {
-      return JSON.parse(content);
-    } catch (jsonError) {
-      return YAML.parse(content);
-    }
-  } catch (error) {
-    throw new Error(`Failed to parse content from '${source}'. Not valid JSON or YAML.`);
-  }
-};
-```
-
-```typescript // tsconfig.json
-{
-  "compilerOptions": {
-    // Environment setup & latest features
-    "lib": ["ESNext"],
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": true,
-
-    // Bundler mode
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": true,
-
-    // Best practices
-    "strict": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-
-    // Stricter flags enabled
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitAny": true
+const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
+  filter: {
+    paths: { include: [], exclude: [] },
+    tags: { include: [], exclude: [] },
+    methods: [],
+    includeDeprecated: false,
   },
-  "include": ["src", "openapi-condenser.config.ts"],
-  "exclude": ["node_modules", "dist"]
+  transform: {
+    removeExamples: false,
+    removeDescriptions: false,
+    includeServers: true,
+    includeInfo: true,
+  },
+};
+
+export default function App() {
+  const [specContent, setSpecContent] = useState('');
+  const [fileName, setFileName] = useState('spec.json');
+  const [config, setConfig] = useState(defaultConfig);
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>('markdown');
+  const [output, setOutput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCondense = useCallback(async () => {
+    if (!specContent) {
+      setError('Please provide an OpenAPI specification.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    setOutput('');
+
+    const payload: Omit<ExtractorConfig, 'source'> & { source: { content: string; path: string } } = {
+      source: {
+        content: specContent,
+        path: fileName,
+      },
+      output: {
+        format: outputFormat,
+      },
+      filter: config.filter,
+      transform: config.transform,
+    };
+
+    const { data, error: apiError } = await client.api.condense.post(payload);
+
+    if (apiError) {
+      setError(apiError.value.errors?.join('\n') || 'An unknown error occurred.');
+    } else if (data) {
+      setOutput(data.data as string);
+    }
+    setIsLoading(false);
+  }, [specContent, fileName, config, outputFormat]);
+  
+  return (
+    <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
+      <header className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-sm border-b border-slate-700/50 z-10">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-white">
+            <span className="text-cyan-400">OpenAPI</span> Condenser
+          </h1>
+          <a href="https://github.com/repomix/openapi-condenser" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-cyan-400 transition-colors">
+            GitHub
+          </a>
+        </div>
+      </header>
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-4 xl:col-span-3">
+            <ConfigPanel 
+              config={config} 
+              setConfig={setConfig} 
+              outputFormat={outputFormat}
+              setOutputFormat={setOutputFormat}
+              onCondense={handleCondense}
+              isLoading={isLoading}
+            />
+          </div>
+
+          <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8">
+            <InputPanel 
+              setSpecContent={setSpecContent}
+              setFileName={setFileName}
+            />
+            <OutputPanel 
+              output={output}
+              isLoading={isLoading}
+              error={error}
+              format={outputFormat}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }
+```
+
+```typescript // src/frontend/client.ts
+import { edenTreaty } from '@elysiajs/eden';
+import type { App } from '../server';
+
+export const client = edenTreaty<App>('http://localhost:3000');
+```
+
+```typescript // src/frontend/components/ConfigPanel.tsx
+import React from 'react';
+import type { FilterOptions, TransformOptions, OutputFormat } from '../../backend/types';
+
+interface ConfigPanelProps {
+  config: { filter: FilterOptions; transform: TransformOptions };
+  setConfig: React.Dispatch<React.SetStateAction<{ filter: FilterOptions; transform: TransformOptions }>>;
+  outputFormat: OutputFormat;
+  setOutputFormat: (format: OutputFormat) => void;
+  onCondense: () => void;
+  isLoading: boolean;
+}
+
+const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
+  <div className="mb-6">
+    <h3 className="text-lg font-semibold text-white mb-3">{title}</h3>
+    <div className="space-y-4">{children}</div>
+  </div>
+);
+
+const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void }> = ({ label, checked, onChange }) => (
+    <label className="flex items-center justify-between cursor-pointer">
+      <span className="text-sm text-slate-300">{label}</span>
+      <div className="relative">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <div className={`block w-10 h-6 rounded-full transition ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
+        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${checked ? 'transform translate-x-4' : ''}`}></div>
+      </div>
+    </label>
+);
+
+const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; }> = ({ label, value, onChange, placeholder }) => (
+    <div>
+        <label className="block text-sm text-slate-300 mb-1">{label}</label>
+        <input 
+            type="text"
+            placeholder={placeholder}
+            value={value?.join(',')}
+            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()) : [])}
+            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+        />
+    </div>
+);
+
+
+export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, outputFormat, setOutputFormat, onCondense, isLoading }) => {
+  const handleFilterChange = (key: keyof FilterOptions, value: any) => {
+    setConfig(c => ({ ...c, filter: { ...c.filter, [key]: value } }));
+  };
+
+  const handleTransformChange = (key: keyof TransformOptions, value: any) => {
+    setConfig(c => ({ ...c, transform: { ...c.transform, [key]: value } }));
+  };
+  
+  return (
+    <div className="sticky top-24 p-6 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg">
+      <Section title="Output Format">
+        <select 
+            value={outputFormat}
+            onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
+            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+        >
+            <option value="markdown">Markdown</option>
+            <option value="json">JSON</option>
+            <option value="yaml">YAML</option>
+            <option value="xml">XML</option>
+        </select>
+      </Section>
+
+      <Section title="Filtering">
+        <TextInput 
+            label="Include Paths (glob)" 
+            placeholder="/users/**, /posts/*"
+            value={config.filter.paths?.include}
+            onChange={v => handleFilterChange('paths', { ...config.filter.paths, include: v })}
+        />
+        <TextInput 
+            label="Exclude Paths (glob)" 
+            placeholder="/internal/**"
+            value={config.filter.paths?.exclude}
+            onChange={v => handleFilterChange('paths', { ...config.filter.paths, exclude: v })}
+        />
+        <Switch 
+            label="Include Deprecated"
+            checked={!!config.filter.includeDeprecated}
+            onChange={v => handleFilterChange('includeDeprecated', v)}
+        />
+      </Section>
+
+      <Section title="Transformation">
+        <Switch 
+            label="Remove Examples"
+            checked={!!config.transform.removeExamples}
+            onChange={v => handleTransformChange('removeExamples', v)}
+        />
+        <Switch 
+            label="Remove Descriptions"
+            checked={!!config.transform.removeDescriptions}
+            onChange={v => handleTransformChange('removeDescriptions', v)}
+        />
+        <Switch 
+            label="Include Servers"
+            checked={!!config.transform.includeServers}
+            onChange={v => handleTransformChange('includeServers', v)}
+        />
+        <Switch 
+            label="Include Info"
+            checked={!!config.transform.includeInfo}
+            onChange={v => handleTransformChange('includeInfo', v)}
+        />
+      </Section>
+      
+      <button 
+        onClick={onCondense}
+        disabled={isLoading}
+        className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
+      >
+        {isLoading ? (
+          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        ) : 'Condense'}
+      </button>
+    </div>
+  );
+};
+```
+
+```typescript // src/frontend/components/InputPanel.tsx
+import React, { useState, useCallback, useRef } from 'react';
+
+interface InputPanelProps {
+  setSpecContent: (content: string) => void;
+  setFileName: (name: string) => void;
+}
+
+export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileName }) => {
+  const [activeTab, setActiveTab] = useState<'paste' | 'upload'>('paste');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setSpecContent(e.target?.result as string);
+        setFileName(file.name);
+      };
+      reader.readAsText(file);
+    }
+  }, [setSpecContent, setFileName]);
+
+  const handlePaste = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setSpecContent(event.target.value);
+    setFileName('spec.json'); // Assume json for pasted content
+  }, [setSpecContent, setFileName]);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg overflow-hidden">
+      <div className="flex border-b border-slate-700/50">
+        <button 
+          onClick={() => setActiveTab('paste')} 
+          className={`px-4 py-2 text-sm font-medium transition ${activeTab === 'paste' ? 'text-white bg-slate-700/50' : 'text-slate-400 hover:bg-slate-800/60'}`}
+        >
+          Paste Spec
+        </button>
+        <button 
+          onClick={() => setActiveTab('upload')} 
+          className={`px-4 py-2 text-sm font-medium transition ${activeTab === 'upload' ? 'text-white bg-slate-700/50' : 'text-slate-400 hover:bg-slate-800/60'}`}
+        >
+          Upload File
+        </button>
+      </div>
+      <div className="p-1">
+        {activeTab === 'paste' ? (
+          <textarea
+            onChange={handlePaste}
+            placeholder="Paste your OpenAPI (JSON or YAML) spec here..."
+            className="w-full h-64 bg-transparent text-slate-300 p-4 resize-none focus:outline-none placeholder-slate-500 font-mono text-sm"
+          />
+        ) : (
+          <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+            <button onClick={handleUploadClick} className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-lg transition-colors">
+              Select OpenAPI File
+            </button>
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".json,.yaml,.yml" />
+            <p className="mt-4 text-sm">Supports .json, .yaml, and .yml</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+```typescript // src/frontend/components/OutputPanel.tsx
+import React, { useState, useEffect } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import type { OutputFormat } from '../../backend/types';
+
+interface OutputPanelProps {
+  output: string;
+  isLoading: boolean;
+  error: string | null;
+  format: OutputFormat;
+}
+
+const languageMap: Record<OutputFormat, string> = {
+  json: 'json',
+  yaml: 'yaml',
+  xml: 'xml',
+  markdown: 'markdown',
+};
+
+export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, error, format }) => {
+  const [copyStatus, setCopyStatus] = useState('Copy');
+  
+  useEffect(() => {
+    if (copyStatus === 'Copied!') {
+      const timer = setTimeout(() => setCopyStatus('Copy'), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copyStatus]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(output);
+    setCopyStatus('Copied!');
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `condensed-spec.${format === 'markdown' ? 'md' : format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col">
+      <div className="flex items-center justify-between p-3 border-b border-slate-700/50">
+        <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
+        {output && !isLoading && (
+          <div className="flex gap-2">
+            <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">{copyStatus}</button>
+            <button onClick={handleDownload} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">Download</button>
+          </div>
+        )}
+      </div>
+      <div className="flex-grow p-1 relative">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-800/50">
+            <svg className="animate-spin h-8 w-8 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        )}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm">
+                <p className="font-bold mb-2">An error occurred:</p>
+                <pre className="whitespace-pre-wrap">{error}</pre>
+            </div>
+          </div>
+        )}
+        {!isLoading && !error && output && (
+            <SyntaxHighlighter language={languageMap[format]} style={vscDarkPlus} customStyle={{ background: 'transparent', margin: 0, padding: '1rem', height: '100%' }} codeTagProps={{style:{fontFamily: 'monospace'}}} wrapLines={true} showLineNumbers>
+                {output}
+            </SyntaxHighlighter>
+        )}
+        {!isLoading && !error && !output && (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                <p>Your condensed OpenAPI spec will appear here.</p>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+```typescript // src/frontend/main.tsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.tsx'
+import './styles.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+```
+
+```css // src/frontend/styles.css
+/* You can add any additional global styles here if needed */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+```
+
+```typescript // src/server.ts
+import { Elysia, t } from 'elysia';
+import { staticPlugin } from '@elysiajs/static';
+import { extractOpenAPI } from './backend/extractor';
+import type { ExtractorConfig } from './backend/types';
+
+const app = new Elysia()
+  .use(staticPlugin())
+  .post(
+    '/api/condense',
+    async ({ body }) => {
+      const config: ExtractorConfig = {
+        source: {
+          type: 'memory',
+          content: body.source.content,
+          path: body.source.path,
+        },
+        output: {
+          format: body.output.format,
+        },
+        filter: body.filter,
+        transform: body.transform,
+      };
+
+      const result = await extractOpenAPI(config);
+
+      if (!result.success) {
+        throw new Error(JSON.stringify(result));
+      }
+
+      return result;
+    },
+    {
+      body: t.Object({
+        source: t.Object({
+          content: t.String(),
+          path: t.String(),
+        }),
+        output: t.Object({
+          format: t.Union([
+            t.Literal('json'),
+            t.Literal('yaml'),
+            t.Literal('xml'),
+            t.Literal('markdown'),
+          ]),
+        }),
+        filter: t.Optional(
+          t.Object({
+            paths: t.Optional(t.Object({
+              include: t.Optional(t.Array(t.String())),
+              exclude: t.Optional(t.Array(t.String())),
+            })),
+            tags: t.Optional(t.Object({
+                include: t.Optional(t.Array(t.String())),
+                exclude: t.Optional(t.Array(t.String())),
+            })),
+            methods: t.Optional(t.Array(t.String())),
+            includeDeprecated: t.Optional(t.Boolean()),
+          })
+        ),
+        transform: t.Optional(
+          t.Object({
+            removeExamples: t.Optional(t.Boolean()),
+            removeDescriptions: t.Optional(t.Boolean()),
+            includeServers: t.Optional(t.Boolean()),
+            includeInfo: t.Optional(t.Boolean()),
+          })
+        ),
+      }),
+    }
+  )
+  .listen(3000);
+
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+
+export type App = typeof app;
+```
+
+```typescript // vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  }
+})
 ```
