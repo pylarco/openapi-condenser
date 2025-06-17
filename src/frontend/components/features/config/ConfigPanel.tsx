@@ -27,7 +27,7 @@ export const ConfigPanel: React.FC = () => {
         <select 
             value={outputFormat}
             onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+            className="w-full bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
         >
             <option value="markdown">Markdown</option>
             <option value="json">JSON</option>

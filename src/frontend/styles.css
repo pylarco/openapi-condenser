@@ -10,14 +10,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Use GPU acceleration for certain animations */
+/* Use GPU acceleration for certain animations with improved visibility */
 .transform,
 .transition-transform,
 .transition,
 .transition-all,
 .transition-opacity {
-  will-change: transform, opacity;
-  transform: translateZ(0);
+  will-change: transform;
   backface-visibility: hidden;
 }
 
@@ -27,7 +26,7 @@ body {
   scroll-behavior: smooth;
 }
 
-/* Optimize tooltips */
+/* Optimize tooltips without translating Z */
 [class*="z-"] {
-  transform: translateZ(0);
+  backface-visibility: hidden;
 }

@@ -17,7 +17,7 @@ const TabButton = memo<{tab: 'paste' | 'upload' | 'url', activeTab: 'paste' | 'u
   ({ tab, activeTab, onClick, children }) => (
     <button
       onClick={() => onClick(tab)}
-      className={`px-4 py-2 text-sm font-medium transition ${activeTab === tab ? 'text-white bg-slate-700/50' : 'text-slate-400 hover:bg-slate-800/60'}`}
+      className={`px-4 py-2 text-sm font-medium transition ${activeTab === tab ? 'text-white bg-slate-700' : 'text-slate-400 hover:bg-slate-800'}`}
     >
       {children}
     </button>
@@ -190,7 +190,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
                   value={url}
                   onChange={handleUrlChange}
                   placeholder="https://petstore3.swagger.io/api/v3/openapi.json"
-                  className="w-full bg-slate-700/50 border border-slate-600 rounded-md pl-3 pr-10 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-md pl-3 pr-10 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
                 />
                 {isFetching && (
                     <div className="absolute right-3">

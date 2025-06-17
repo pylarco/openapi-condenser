@@ -6,7 +6,6 @@ export const usePanelEntrance = (el: React.RefObject<HTMLElement>) => {
     if (!el.current) return
 
     gsap.from(el.current, {
-      opacity: 0,
       y: 50,
       duration: 0.5,
       ease: 'power3.out',

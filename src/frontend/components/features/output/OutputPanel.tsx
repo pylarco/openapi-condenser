@@ -8,12 +8,12 @@ import { languageMap } from '../../../constants';
 
 const SkeletonLoader = () => (
     <div className="absolute inset-0 p-4 space-y-3 animate-pulse">
-        <div className="h-4 bg-slate-700/50 rounded w-1/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/3"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-2/5"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
+        <div className="h-4 bg-slate-700 rounded w-1/4"></div>
+        <div className="h-4 bg-slate-700 rounded w-1/2"></div>
+        <div className="h-4 bg-slate-700 rounded w-1/3"></div>
+        <div className="h-4 bg-slate-700 rounded w-3/4"></div>
+        <div className="h-4 bg-slate-700 rounded w-2/5"></div>
+        <div className="h-4 bg-slate-700 rounded w-1/2"></div>
     </div>
 );
 
@@ -96,7 +96,7 @@ export const OutputPanel: React.FC<{}> = () => {
         {isLoading && <SkeletonLoader />}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
+            <div className="bg-red-900 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
                 <p className="font-bold mb-2">An error occurred:</p>
                 <pre className="whitespace-pre-wrap">{error}</pre>
             </div>

@@ -21,7 +21,7 @@ export const TextInput: React.FC<{ label: string; value: string[] | undefined; o
                 placeholder={placeholder}
                 value={value?.join(', ')}
                 onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
-                className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition"
+                className="w-full bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition"
             />
         </div>
     )
