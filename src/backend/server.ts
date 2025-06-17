@@ -30,7 +30,7 @@ const isPrivateIP = (ip: string) => {
   }
 
   // Handle localhost IPs
-  if (ip === '127.0.0.1' || ip === '::1') {
+  if (ip === '127.0.0.1') {
     return true;
   }
 
@@ -138,7 +138,7 @@ export const app = new Elysia({ prefix: '/api' })
       
       if (!response.ok) {
         // Pass through the status code from the remote server if it's an error
-        set.status = response.status;
+        set.status = response.status === 200 ? 500 : response.status;
         const errorText = await response.text();
         return { error: `Failed to fetch spec from ${url}: ${response.statusText}. Details: ${errorText}` };
       }

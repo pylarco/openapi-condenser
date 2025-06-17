@@ -151,7 +151,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
   }, []);
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg overflow-hidden">
+    <div className="bg-slate-800/75 backdrop-blur-sm border border-slate-700/50 rounded-lg overflow-hidden">
       <div className="flex border-b border-slate-700/50">
         <TabButton tab="paste" activeTab={activeTab} onClick={handleTabClick}>Paste Spec</TabButton>
         <TabButton tab="upload" activeTab={activeTab} onClick={handleTabClick}>Upload File</TabButton>

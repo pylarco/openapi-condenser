@@ -73,7 +73,7 @@ export const OutputPanel: React.FC<{}> = () => {
   
   const panelClasses = isFullScreen 
     ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
-    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
+    : "bg-slate-800/75 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
 
   return (
     <div className={panelClasses}>

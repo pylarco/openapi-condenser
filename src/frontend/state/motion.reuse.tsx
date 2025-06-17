@@ -62,7 +62,7 @@ export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
 }
 
 export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
-  const timeline = useRef(gsap.timeline({ paused: true }));
+  const isInitial = useRef(true);
 
   useLayoutEffect(() => {
     if (!el.current) return;
@@ -70,18 +70,20 @@ export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checke
     const background = el.current.nextElementSibling;
     if (!knob || !background) return;
 
-    timeline.current.clear().to(background, {
-      backgroundColor: checked ? 'rgb(6 182 212)' : 'rgb(71 85 105)',
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }).to(knob, {
-      x: checked ? 16 : 0,
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }, '<');
-  }, []);
+    const duration = isInitial.current ? 0 : 0.2;
 
-  useLayoutEffect(() => {
-    timeline.current.play();
+    gsap.to(background, {
+      backgroundColor: checked ? 'rgb(6 182 212)' : 'rgb(71 85 105)',
+      duration,
+      ease: 'power2.inOut',
+    });
+
+    gsap.to(knob, {
+      x: checked ? 16 : 0,
+      duration,
+      ease: 'power2.inOut',
+    });
+
+    isInitial.current = false;
   }, [checked]);
-} 
+};
