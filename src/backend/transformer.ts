@@ -85,7 +85,7 @@ export const filterMethods = (
 /**
  * Recursively find all $ref values in a given object.
  */
-const findRefsRecursive = (obj: any, refs: Set<string>): void => {
+export const findRefsRecursive = (obj: any, refs: Set<string>): void => {
   if (!obj || typeof obj !== 'object') {
     return;
   }
@@ -107,17 +107,27 @@ const findRefsRecursive = (obj: any, refs: Set<string>): void => {
 /**
  * Parses a component reference string.
  */
-const getComponentNameFromRef = (ref: string): { type: string; name: string } | null => {
+export const getComponentNameFromRef = (ref: string): { type: string; name: string } | null => {
   const prefix = '#/components/';
   if (!ref.startsWith(prefix)) {
-    return null;
-  }
-  const parts = ref.substring(prefix.length).split('/');
-  if (parts.length !== 2) {
+    // This is not a component reference we can process for removal.
+    // It might be a reference to another part of the document, which is fine.
     return null;
   }
   
-  const [type, name] = parts;
+  const path = ref.substring(prefix.length);
+  const parts = path.split('/');
+  
+  // We expect a structure like 'schemas/MySchema' or 'parameters/MyParameter'
+  if (parts.length < 2) {
+    console.warn(`[OpenAPI Condenser] Invalid component reference found: ${ref}`);
+    return null;
+  }
+  
+  const type = parts[0];
+  // The name might contain slashes if it's nested, so we join the rest.
+  const name = parts.slice(1).join('/');
+
   if (!type || !name) {
     return null;
   }
@@ -129,37 +139,49 @@ const getComponentNameFromRef = (ref: string): { type: string; name: string } | 
  * Removes all components (schemas, parameters, etc.) that are not referenced
  * in the remaining parts of the specification.
  */
-const removeUnusedComponents = (spec: any): any => {
+export const removeUnusedComponents = (spec: any): any => {
   if (!spec.components) return spec;
 
-  // 1. Find all initial references from outside the components section
-  const initialRefs = new Set<string>();
-  findRefsRecursive(spec.paths, initialRefs);
-  findRefsRecursive(spec.tags, initialRefs);
-  findRefsRecursive(spec.security, initialRefs);
-  findRefsRecursive(spec.info, initialRefs);
-  findRefsRecursive(spec.servers, initialRefs);
-  if (spec.webhooks) findRefsRecursive(spec.webhooks, initialRefs);
+  // 1. Find all initial references from the spec roots that are kept.
+  const allRefs = new Set<string>();
+  const specRoots = [
+    spec.paths,
+    spec.tags,
+    spec.security,
+    spec.info,
+    spec.servers,
+    spec.webhooks,
+    spec.externalDocs
+  ];
 
-  // 2. Transitively discover all dependencies within components
-  const allRefs = new Set<string>(initialRefs);
-  let lastSize = -1;
-  while (allRefs.size > lastSize) {
-    lastSize = allRefs.size;
-    allRefs.forEach(ref => {
-      const componentInfo = getComponentNameFromRef(ref);
-      if (componentInfo && spec.components[componentInfo.type]?.[componentInfo.name]) {
-        const component = spec.components[componentInfo.type][componentInfo.name];
-        findRefsRecursive(component, allRefs);
-      }
-    });
+  for (const root of specRoots) {
+    if (root) {
+      findRefsRecursive(root, allRefs);
+    }
   }
 
-  // 3. Build a new components object with only the referenced items
+  // 2. Transitively discover all dependencies within the components.
+  // We keep iterating until no new references are found in an iteration.
+  let previousSize;
+  do {
+    previousSize = allRefs.size;
+    allRefs.forEach(ref => {
+      const componentInfo = getComponentNameFromRef(ref);
+      if (componentInfo) {
+        const { type, name } = componentInfo;
+        const component = spec.components[type]?.[name];
+        if (component) {
+          findRefsRecursive(component, allRefs);
+        }
+      }
+    });
+  } while (allRefs.size > previousSize);
+
+  // 3. Build a new components object with only the referenced items.
   const newComponents: Record<string, any> = {};
   for (const componentType in spec.components) {
-    const newComponentGroup: Record<string, any> = {};
     const componentGroup = spec.components[componentType];
+    const newComponentGroup: Record<string, any> = {};
     for (const componentName in componentGroup) {
       const ref = `#/components/${componentType}/${componentName}`;
       if (allRefs.has(ref)) {
@@ -171,7 +193,7 @@ const removeUnusedComponents = (spec: any): any => {
     }
   }
 
-  // 4. Replace the old components object
+  // 4. Replace the old components object or remove it if empty.
   if (Object.keys(newComponents).length > 0) {
     spec.components = newComponents;
   } else {

@@ -5,14 +5,16 @@ import { getFormatter } from './formatters';
 import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-const calculateStats = (spec: any): SpecStats => {
+export const calculateStats = (spec: any): SpecStats => {
   if (!spec || typeof spec !== 'object') {
     return { paths: 0, operations: 0, schemas: 0 };
   }
+  const validMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
   const paths = Object.keys(spec.paths || {});
   const operations = paths.reduce((count, path) => {
-    if (spec.paths[path] && typeof spec.paths[path] === 'object') {
-      return count + Object.keys(spec.paths[path]).length;
+    const pathItem = spec.paths[path];
+    if (pathItem && typeof pathItem === 'object') {
+      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
     }
     return count;
   }, 0);
