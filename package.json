@@ -9,7 +9,8 @@
     "dev": "concurrently \"vite\" \"bun run src/backend/server.ts\"",
     "start": "bun run src/backend/server.ts",
     "build": "vite build",
-    "cli": "bun run src/backend/cli.ts"
+    "cli": "bun run src/backend/cli.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",

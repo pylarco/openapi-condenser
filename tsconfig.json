@@ -25,6 +25,6 @@
     "noUnusedParameters": true,
     "noImplicitAny": true
   },
-  "include": ["src", "openapi-condenser.config.ts", "vite.config.ts"],
+  "include": ["src", "openapi-condenser.config.ts", "vite.config.ts", "test"],
   "exclude": ["node_modules", "dist"]
 }
