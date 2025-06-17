@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { swagger } from '@elysiajs/swagger';
+import { cors } from '@elysiajs/cors';
 import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
 import { resolve } from 'node:dns/promises';
@@ -44,6 +45,12 @@ const isPrivateIP = (ip: string) => {
 
 export const app = new Elysia()
   .use(swagger())
+  .use(cors({
+    origin: /^http:\/\/localhost(:\d+)?$/,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  }))
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400;
