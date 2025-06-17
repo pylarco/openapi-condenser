@@ -3,7 +3,7 @@
     "full-source-523": {
       "name": "full-source",
       "created": "2025-06-17T04:44:02.708Z",
-      "lastUsed": "2025-06-17T04:44:11.424Z",
+      "lastUsed": "2025-06-17T06:24:48.479Z",
       "tags": [],
       "files": [
         "src",
@@ -11,7 +11,8 @@
         "openapi-condenser.config.ts",
         "package.json",
         "tsconfig.json",
-        "vite.config.ts"
+        "vite.config.ts",
+        "test"
       ]
     },
     "backend-source-120": {

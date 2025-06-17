@@ -58,7 +58,7 @@ const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange
             type="text"
             placeholder={placeholder}
             value={value?.join(', ')}
-            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()) : [])}
+            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
             className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
         />
     </div>

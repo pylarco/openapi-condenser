@@ -154,7 +154,12 @@ export const app = new Elysia()
           ...body.filter,
           includeDeprecated: body.filter?.includeDeprecated ?? false,
         },
-        transform: body.transform,
+        transform: {
+          removeExamples: body.transform?.removeExamples ?? false,
+          removeDescriptions: body.transform?.removeDescriptions ?? false,
+          includeServers: body.transform?.includeServers ?? true,
+          includeInfo: body.transform?.includeInfo ?? true,
+        },
       };
 
       const result = await extractOpenAPI(config);
