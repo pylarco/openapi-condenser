@@ -22,7 +22,7 @@ export const ConfigPanel: React.FC = () => {
   };
   
   return (
-    <div className="sticky top-24 p-6 bg-slate-800/75 backdrop-blur-sm border border-slate-700/50 rounded-lg">
+    <div className="sticky top-24 p-6 bg-slate-800 border border-slate-700 rounded-lg">
       <Section title="Output Format">
         <select 
             value={outputFormat}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { useAtomValue } from 'jotai';
 import CodeMirror from '@uiw/react-codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -73,11 +74,11 @@ export const OutputPanel: React.FC<{}> = () => {
   
   const panelClasses = isFullScreen 
     ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
-    : "bg-slate-800/75 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
+    : "bg-slate-800 border border-slate-700 rounded-lg min-h-[20rem] flex flex-col";
 
-  return (
+  const panelContent = (
     <div className={panelClasses}>
-      <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
+      <div className="flex items-center justify-between p-3 border-b border-slate-700 flex-shrink-0">
         <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
         <div className="flex items-center gap-2">
             <button onClick={handleToggleFullscreen} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
@@ -119,4 +120,10 @@ export const OutputPanel: React.FC<{}> = () => {
       </div>
     </div>
   );
+
+  if (isFullScreen) {
+    return ReactDOM.createPortal(panelContent, document.body);
+  }
+
+  return panelContent;
 };

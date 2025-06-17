@@ -52,14 +52,14 @@ export const StatsPanel: React.FC = () => {
   ];
 
   return (
-    <div className="bg-slate-800/75 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
+    <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
       <h3 className="text-lg font-semibold text-white mb-4">Condensation Stats</h3>
       <StatsHeader />
-      <div className="divide-y divide-slate-700/50">
+      <div className="divide-y divide-slate-700">
         {specStats.map(stat => <StatItem key={stat.label} {...stat} />)}
       </div>
-      <div className="my-2 border-t border-slate-700/50" />
-      <div className="divide-y divide-slate-700/50">
+      <div className="my-2 border-t border-slate-700" />
+      <div className="divide-y divide-slate-700">
         {contentStats.map(stat => <StatItem key={stat.label} {...stat} />)}
       </div>
     </div>
