@@ -4,6 +4,17 @@
 export const formatAsMarkdown = (data: any): string => {
   let markdown = '';
   
+  const resolveRef = (refObj: any) => {
+    if (!refObj?.$ref) return refObj;
+
+    const refPath = refObj.$ref.replace('#/components/', '').split('/');
+    let current = data.components;
+    for (const part of refPath) {
+      current = current?.[part];
+    }
+    return current || refObj; // Return original ref if not found
+  };
+  
   // Add API information
   if (data.info) {
     markdown += `# ${data.info.title || 'API Documentation'}\n\n`;
@@ -52,9 +63,10 @@ export const formatAsMarkdown = (data: any): string => {
           markdown += `| Name | In | Required | Type | Description |\n`;
           markdown += `| ---- | -- | -------- | ---- | ----------- |\n`;
           
-          operation.parameters.forEach((param: any) => {
+          operation.parameters.forEach((paramRef: any) => {
+            const param = resolveRef(paramRef);
             const type = param.schema ? formatSchemaType(param.schema) : '';
-            markdown += `| ${param.name} | ${param.in} | ${param.required ? 'Yes' : 'No'} | ${type} | ${param.description || ''} |\n`;
+            markdown += `| ${param.name || ''} | ${param.in || ''} | ${param.required ? 'Yes' : 'No'} | ${type} | ${param.description || ''} |\n`;
           });
           
           markdown += '\n';
@@ -62,14 +74,15 @@ export const formatAsMarkdown = (data: any): string => {
         
         // Request body
         if (operation.requestBody) {
+          const requestBody = resolveRef(operation.requestBody);
           markdown += `##### Request Body\n\n`;
           
-          if (operation.requestBody.description) {
-            markdown += `${operation.requestBody.description}\n\n`;
+          if (requestBody.description) {
+            markdown += `${requestBody.description}\n\n`;
           }
           
-          if (operation.requestBody.content) {
-            Object.entries(operation.requestBody.content).forEach(([contentType, content]: [string, any]) => {
+          if (requestBody.content) {
+            Object.entries(requestBody.content).forEach(([contentType, content]: [string, any]) => {
               markdown += `**Content Type:** ${contentType}\n\n`;
               
               if (content.schema) {
@@ -84,7 +97,8 @@ export const formatAsMarkdown = (data: any): string => {
         if (operation.responses && Object.keys(operation.responses).length > 0) {
           markdown += `##### Responses\n\n`;
           
-          Object.entries(operation.responses).forEach(([code, response]: [string, any]) => {
+          Object.entries(operation.responses).forEach(([code, responseRef]: [string, any]) => {
+            const response = resolveRef(responseRef);
             markdown += `###### ${code} - ${response.description || ''}\n\n`;
             
             if (response.content) {
