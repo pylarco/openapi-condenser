@@ -48,16 +48,6 @@ export const OutputPanel: React.FC<OutputPanelProps> = () => {
     }
   }, [copyStatus]);
 
-  // Check if we need to automatically go fullscreen
-  useEffect(() => {
-    if (!output) return;
-    
-    const lineCount = output.split('\n').length;
-    if (lineCount > 100) {
-      setIsFullScreen(true);
-    }
-  }, [output]);
-
   // Setup scroll listener for fullscreen mode
   useEffect(() => {
     const container = scrollContainerRef.current;
