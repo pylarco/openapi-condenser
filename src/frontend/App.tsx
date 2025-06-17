@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { client } from './client';
-import type { ExtractorConfig, FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
+import type { FilterOptions, TransformOptions, OutputFormat, SpecStats } from '../backend/types';
 import { ConfigPanel } from './components/ConfigPanel';
 import { InputPanel } from './components/InputPanel';
 import { OutputPanel } from './components/OutputPanel';
@@ -58,19 +57,32 @@ export default function App() {
       transform: config.transform,
     };
 
-    const { data, error: apiError } = await client.api.condense.post(payload);
+    try {
+      // Make a fetch call directly instead of using client
+      const response = await fetch('http://localhost:3000/api/condense', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
 
-    if (apiError) {
-      const errorPayload = apiError.value as any;
-      if (errorPayload && errorPayload.errors) {
-        setError(errorPayload.errors.join('\n'));
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData && errorData.errors) {
+          setError(errorData.errors.join('\n'));
+        } else {
+          setError(errorData.error || 'An unknown error occurred');
+        }
       } else {
-        setError(String(errorPayload.error || apiError.value) || 'An unknown error occurred.');
+        const data = await response.json();
+        setOutput(data.data as string);
+        setStats(data.stats as Stats);
       }
-    } else if (data) {
-      setOutput(data.data as string);
-      setStats(data.stats as Stats);
+    } catch (err) {
+      setError(`Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
     }
+
     setIsLoading(false);
   }, [specContent, fileName, config, outputFormat]);
   

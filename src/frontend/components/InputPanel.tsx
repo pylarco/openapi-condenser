@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { client } from '../client';
 
 interface InputPanelProps {
   setSpecContent: (content: string) => void;
@@ -43,21 +42,28 @@ export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileN
     setIsFetching(true);
     setFetchError(null);
     setUploadedFileName(null);
-
-    const { data, error } = await client.api['fetch-spec'].get({ query: { url } });
-
-    if (error) {
-      const errorPayload = error.value as any;
-      setFetchError(errorPayload.error || 'Failed to fetch the spec.');
-    } else if (data) {
-      setSpecContent(data.content);
-      try {
-        const urlObject = new URL(url);
-        setFileName(urlObject.pathname.split('/').pop() || 'spec.json');
-      } catch {
-        setFileName('spec.from.url');
+    
+    try {
+      // Use direct fetch instead of client
+      const response = await fetch(`http://localhost:3000/api/fetch-spec?url=${encodeURIComponent(url)}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        setFetchError(errorData.error || 'Failed to fetch the spec.');
+      } else {
+        const data = await response.json();
+        setSpecContent(data.content);
+        try {
+          const urlObject = new URL(url);
+          setFileName(urlObject.pathname.split('/').pop() || 'spec.json');
+        } catch {
+          setFileName('spec.from.url');
+        }
       }
+    } catch (err) {
+      setFetchError(`Failed to fetch: ${err instanceof Error ? err.message : String(err)}`);
     }
+    
     setIsFetching(false);
   }, [url, setSpecContent, setFileName]);
 

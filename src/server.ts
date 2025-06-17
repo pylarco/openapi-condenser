@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { swagger } from '@elysiajs/swagger';
 import { extractOpenAPI } from './backend/extractor';
-import type { ExtractorConfig } from './backend/types';
+import type { ExtractorConfig, SpecStats } from './backend/types';
 
 const app = new Elysia()
   .use(swagger())
@@ -64,10 +64,26 @@ const app = new Elysia()
 
       if (!result.success) {
         set.status = 400;
-        return result;
+        return {
+          success: false,
+          errors: result.errors || ['Unknown error occurred'],
+          warnings: result.warnings
+        };
       }
 
-      return result;
+      // Ensure we have stats with the expected structure
+      const defaultStats: SpecStats = { paths: 0, operations: 0, schemas: 0 };
+      const stats = result.stats || { before: defaultStats, after: defaultStats };
+
+      return {
+        success: true as const,
+        data: result.data as string,
+        stats: {
+          before: stats.before || defaultStats,
+          after: stats.after || defaultStats
+        },
+        warnings: result.warnings
+      };
     },
     {
       body: t.Object({
