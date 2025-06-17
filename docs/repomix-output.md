@@ -39,6 +39,7 @@ The content is organized as follows:
 index.html
 src/frontend/App.tsx
 src/frontend/client.ts
+src/frontend/components/features/ActionPanel.tsx
 src/frontend/components/features/config/ConfigPanel.tsx
 src/frontend/components/features/index.ts
 src/frontend/components/features/input/InputPanel.tsx
@@ -88,14 +89,6 @@ vite.config.ts
     <script type="module" src="/src/frontend/main.tsx"></script>
   </body>
 </html>
-```
-
-## File: src/frontend/components/features/index.ts
-```typescript
-export * from './config/ConfigPanel';
-export * from './input/InputPanel';
-export * from './output/OutputPanel';
-export * from './stats/StatsPanel';
 ```
 
 ## File: src/frontend/components/features/input/InputPanel.tsx
@@ -304,6 +297,126 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
 };
 ```
 
+## File: src/frontend/components/ui/Section.tsx
+```typescript
+import React from 'react';
+
+export const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
+  <div className="mb-6">
+    <h3 className="text-lg font-semibold text-white mb-3">{title}</h3>
+    <div className="space-y-4">{children}</div>
+  </div>
+);
+```
+
+## File: src/frontend/components/ui/TextInput.tsx
+```typescript
+import React from 'react';
+import { Tooltip } from './Tooltip';
+
+export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => (
+    <div>
+        <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
+            {label}
+            {tooltip && (
+                <Tooltip text={tooltip}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </Tooltip>
+            )}
+        </label>
+        <input 
+            type="text"
+            placeholder={placeholder}
+            value={value?.join(', ')}
+            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
+            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+        />
+    </div>
+));
+```
+
+## File: src/frontend/components/ui/Tooltip.tsx
+```typescript
+import React from 'react';
+
+export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
+    <div className="relative flex items-center group">
+      {children}
+      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-[1000]">
+        {text}
+      </div>
+    </div>
+);
+```
+
+## File: src/frontend/main.tsx
+```typescript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.tsx'
+import './styles.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+```
+
+## File: vite.config.ts
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
+  }
+})
+```
+
+## File: src/frontend/components/features/ActionPanel.tsx
+```typescript
+import React from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { isLoadingAtom, condenseSpecAtom, specContentAtom, outputAtom } from '../../state/atoms';
+
+export const ActionPanel: React.FC = () => {
+    const isLoading = useAtomValue(isLoadingAtom);
+    const specContent = useAtomValue(specContentAtom);
+    const output = useAtomValue(outputAtom);
+    const onCondense = useSetAtom(condenseSpecAtom);
+
+    return (
+        <button 
+            onClick={() => onCondense()}
+            disabled={isLoading || !specContent}
+            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
+        >
+            {isLoading ? (
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            ) : output ? 'Re-condense' : 'Condense'}
+        </button>
+    );
+}
+```
+
+## File: src/frontend/components/features/index.ts
+```typescript
+export * from './ActionPanel';
+export * from './config/ConfigPanel';
+export * from './input/InputPanel';
+export * from './output/OutputPanel';
+export * from './stats/StatsPanel';
+```
+
 ## File: src/frontend/components/features/output/OutputPanel.tsx
 ```typescript
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -355,16 +468,6 @@ export const OutputPanel: React.FC<OutputPanelProps> = () => {
       return () => clearTimeout(timer);
     }
   }, [copyStatus]);
-
-  // Check if we need to automatically go fullscreen
-  useEffect(() => {
-    if (!output) return;
-    
-    const lineCount = output.split('\n').length;
-    if (lineCount > 100) {
-      setIsFullScreen(true);
-    }
-  }, [output]);
 
   // Setup scroll listener for fullscreen mode
   useEffect(() => {
@@ -454,245 +557,6 @@ export const OutputPanel: React.FC<OutputPanelProps> = () => {
 };
 ```
 
-## File: src/frontend/components/ui/Section.tsx
-```typescript
-import React from 'react';
-
-export const Section: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
-  <div className="mb-6">
-    <h3 className="text-lg font-semibold text-white mb-3">{title}</h3>
-    <div className="space-y-4">{children}</div>
-  </div>
-);
-```
-
-## File: src/frontend/components/ui/Switch.tsx
-```typescript
-import React from 'react';
-import { Tooltip } from './Tooltip';
-
-export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => (
-    <label className="flex items-center justify-between cursor-pointer">
-        <span className="text-sm text-slate-300 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </span>
-      <div className="relative">
-        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <div className={`block w-10 h-6 rounded-full transition ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
-        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${checked ? 'transform translate-x-4' : ''}`}></div>
-      </div>
-    </label>
-));
-```
-
-## File: src/frontend/components/ui/TextInput.tsx
-```typescript
-import React from 'react';
-import { Tooltip } from './Tooltip';
-
-export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => (
-    <div>
-        <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
-            {label}
-            {tooltip && (
-                <Tooltip text={tooltip}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </Tooltip>
-            )}
-        </label>
-        <input 
-            type="text"
-            placeholder={placeholder}
-            value={value?.join(', ')}
-            onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-        />
-    </div>
-));
-```
-
-## File: src/frontend/components/ui/Tooltip.tsx
-```typescript
-import React from 'react';
-
-export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
-    <div className="relative flex items-center group">
-      {children}
-      <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-[1000]">
-        {text}
-      </div>
-    </div>
-);
-```
-
-## File: src/frontend/main.tsx
-```typescript
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
-import './styles.css'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
-```
-
-## File: vite.config.ts
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
-})
-```
-
-## File: src/frontend/components/features/config/ConfigPanel.tsx
-```typescript
-import React from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import type { FilterOptions, TransformOptions, OutputFormat } from '../../../../backend/types';
-import { configAtom, outputFormatAtom, isLoadingAtom, condenseSpecAtom } from '../../../state/atoms';
-import { Section, Switch, TextInput } from '../../ui';
-
-type Config = {
-  filter: FilterOptions;
-  transform: TransformOptions;
-}
-
-export const ConfigPanel: React.FC = () => {
-  const [config, setConfig] = useAtom(configAtom);
-  const [outputFormat, setOutputFormat] = useAtom(outputFormatAtom);
-  const isLoading = useAtomValue(isLoadingAtom);
-  const onCondense = useSetAtom(condenseSpecAtom);
-
-  const handleFilterChange = (key: keyof FilterOptions, value: any) => {
-    setConfig((c: Config) => ({ ...c, filter: { ...c.filter, [key]: value } }));
-  };
-
-  const handleTransformChange = (key: keyof TransformOptions, value: any) => {
-    setConfig((c: Config) => ({ ...c, transform: { ...c.transform, [key]: value } }));
-  };
-  
-  return (
-    <div className="sticky top-24 p-6 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg">
-      <Section title="Output Format">
-        <select 
-            value={outputFormat}
-            onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
-            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
-        >
-            <option value="markdown">Markdown</option>
-            <option value="json">JSON</option>
-            <option value="yaml">YAML</option>
-            <option value="xml">XML</option>
-        </select>
-      </Section>
-
-      <Section title="Filtering">
-        <TextInput 
-            label="Include Paths (glob)" 
-            placeholder="/users/**, /posts/*"
-            value={config.filter.paths?.include}
-            onChange={v => handleFilterChange('paths', { ...config.filter.paths, include: v })}
-            tooltip="Comma-separated list of glob patterns to include paths. e.g., /users/**"
-        />
-        <TextInput 
-            label="Exclude Paths (glob)" 
-            placeholder="/internal/**"
-            value={config.filter.paths?.exclude}
-            onChange={v => handleFilterChange('paths', { ...config.filter.paths, exclude: v })}
-            tooltip="Comma-separated list of glob patterns to exclude paths. e.g., /admin/**"
-        />
-        <Switch 
-            label="Include Deprecated"
-            checked={!!config.filter.includeDeprecated}
-            onChange={v => handleFilterChange('includeDeprecated', v)}
-            tooltip="If checked, endpoints marked as 'deprecated' will be included."
-        />
-      </Section>
-
-      <Section title="Transformation">
-        <Switch 
-            label="Include Info"
-            checked={!!config.transform.includeInfo}
-            onChange={v => handleTransformChange('includeInfo', v)}
-            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
-        />
-        <Switch 
-            label="Include Servers"
-            checked={!!config.transform.includeServers}
-            onChange={v => handleTransformChange('includeServers', v)}
-            tooltip="If checked, the 'servers' block will be included."
-        />
-        <Switch 
-            label="Include Responses"
-            checked={!!config.transform.includeResponses}
-            onChange={v => handleTransformChange('includeResponses', v)}
-            tooltip="If checked, the 'responses' block for each endpoint will be included."
-        />
-        <Switch 
-            label="Include Request Bodies"
-            checked={!!config.transform.includeRequestBodies}
-            onChange={v => handleTransformChange('includeRequestBodies', v)}
-            tooltip="If checked, the 'requestBody' block for each endpoint will be included."
-        />
-        <Switch 
-            label="Include Schemas"
-            checked={!!config.transform.includeSchemas}
-            onChange={v => handleTransformChange('includeSchemas', v)}
-            tooltip="If checked, the 'components/schemas' block will be included."
-        />
-        <Switch 
-            label="Remove Examples"
-            checked={!!config.transform.removeExamples}
-            onChange={v => handleTransformChange('removeExamples', v)}
-            tooltip="If checked, all 'example' and 'examples' fields will be removed."
-        />
-        <Switch 
-            label="Remove Descriptions"
-            checked={!!config.transform.removeDescriptions}
-            onChange={v => handleTransformChange('removeDescriptions', v)}
-            tooltip="If checked, all 'description' fields will be removed."
-        />
-        <Switch 
-            label="Remove Summaries"
-            checked={!!config.transform.removeSummaries}
-            onChange={v => handleTransformChange('removeSummaries', v)}
-            tooltip="If checked, all 'summary' fields will be removed."
-        />
-      </Section>
-      
-      <button 
-        onClick={() => onCondense()}
-        disabled={isLoading}
-        className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
-      >
-        {isLoading ? (
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        ) : 'Condense'}
-      </button>
-    </div>
-  );
-};
-```
-
 ## File: src/frontend/components/features/stats/StatsPanel.tsx
 ```typescript
 import React from 'react';
@@ -770,6 +634,30 @@ export * from './Tooltip';
 export * from './Section';
 export * from './Switch';
 export * from './TextInput';
+```
+
+## File: src/frontend/components/ui/Switch.tsx
+```typescript
+import React from 'react';
+import { Tooltip } from './Tooltip';
+
+export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => (
+    <label className="flex items-center justify-between cursor-pointer">
+        <span className="text-sm text-slate-300 flex items-center gap-2">
+            {label}
+            {tooltip && (
+                <Tooltip text={tooltip}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </Tooltip>
+            )}
+        </span>
+      <div className="relative">
+        <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        <div className={`block w-10 h-6 rounded-full transition-colors duration-200 ease-in-out ${checked ? 'bg-cyan-500' : 'bg-slate-600'}`}></div>
+        <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
+      </div>
+    </label>
+));
 ```
 
 ## File: src/frontend/state/atoms.ts
@@ -936,6 +824,124 @@ import type { App } from '../backend/server';
 export const client = edenTreaty<App>('http://localhost:3000');
 ```
 
+## File: src/frontend/components/features/config/ConfigPanel.tsx
+```typescript
+import React from 'react';
+import { useAtom } from 'jotai';
+import type { FilterOptions, TransformOptions, OutputFormat } from '../../../../backend/types';
+import { configAtom, outputFormatAtom } from '../../../state/atoms';
+import { Section, Switch, TextInput } from '../../ui';
+
+type Config = {
+  filter: FilterOptions;
+  transform: TransformOptions;
+}
+
+export const ConfigPanel: React.FC = () => {
+  const [config, setConfig] = useAtom(configAtom);
+  const [outputFormat, setOutputFormat] = useAtom(outputFormatAtom);
+
+  const handleFilterChange = (key: keyof FilterOptions, value: any) => {
+    setConfig((c: Config) => ({ ...c, filter: { ...c.filter, [key]: value } }));
+  };
+
+  const handleTransformChange = (key: keyof TransformOptions, value: any) => {
+    setConfig((c: Config) => ({ ...c, transform: { ...c.transform, [key]: value } }));
+  };
+  
+  return (
+    <div className="sticky top-24 p-6 bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg">
+      <Section title="Output Format">
+        <select 
+            value={outputFormat}
+            onChange={(e) => setOutputFormat(e.target.value as OutputFormat)}
+            className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition"
+        >
+            <option value="markdown">Markdown</option>
+            <option value="json">JSON</option>
+            <option value="yaml">YAML</option>
+            <option value="xml">XML</option>
+        </select>
+      </Section>
+
+      <Section title="Filtering">
+        <TextInput 
+            label="Include Paths (glob)" 
+            placeholder="/users/**, /posts/*"
+            value={config.filter.paths?.include}
+            onChange={v => handleFilterChange('paths', { ...config.filter.paths, include: v })}
+            tooltip="Comma-separated list of glob patterns to include paths. e.g., /users/**"
+        />
+        <TextInput 
+            label="Exclude Paths (glob)" 
+            placeholder="/internal/**"
+            value={config.filter.paths?.exclude}
+            onChange={v => handleFilterChange('paths', { ...config.filter.paths, exclude: v })}
+            tooltip="Comma-separated list of glob patterns to exclude paths. e.g., /admin/**"
+        />
+        <Switch 
+            label="Include Deprecated"
+            checked={!!config.filter.includeDeprecated}
+            onChange={v => handleFilterChange('includeDeprecated', v)}
+            tooltip="If checked, endpoints marked as 'deprecated' will be included."
+        />
+      </Section>
+
+      <Section title="Transformation">
+        <Switch 
+            label="Include Info"
+            checked={!!config.transform.includeInfo}
+            onChange={v => handleTransformChange('includeInfo', v)}
+            tooltip="If checked, the 'info' block (title, version, etc.) will be included."
+        />
+        <Switch 
+            label="Include Servers"
+            checked={!!config.transform.includeServers}
+            onChange={v => handleTransformChange('includeServers', v)}
+            tooltip="If checked, the 'servers' block will be included."
+        />
+        <Switch 
+            label="Include Responses"
+            checked={!!config.transform.includeResponses}
+            onChange={v => handleTransformChange('includeResponses', v)}
+            tooltip="If checked, the 'responses' block for each endpoint will be included."
+        />
+        <Switch 
+            label="Include Request Bodies"
+            checked={!!config.transform.includeRequestBodies}
+            onChange={v => handleTransformChange('includeRequestBodies', v)}
+            tooltip="If checked, the 'requestBody' block for each endpoint will be included."
+        />
+        <Switch 
+            label="Include Schemas"
+            checked={!!config.transform.includeSchemas}
+            onChange={v => handleTransformChange('includeSchemas', v)}
+            tooltip="If checked, the 'components/schemas' block will be included."
+        />
+        <Switch 
+            label="Remove Examples"
+            checked={!!config.transform.removeExamples}
+            onChange={v => handleTransformChange('removeExamples', v)}
+            tooltip="If checked, all 'example' and 'examples' fields will be removed."
+        />
+        <Switch 
+            label="Remove Descriptions"
+            checked={!!config.transform.removeDescriptions}
+            onChange={v => handleTransformChange('removeDescriptions', v)}
+            tooltip="If checked, all 'description' fields will be removed."
+        />
+        <Switch 
+            label="Remove Summaries"
+            checked={!!config.transform.removeSummaries}
+            onChange={v => handleTransformChange('removeSummaries', v)}
+            tooltip="If checked, all 'summary' fields will be removed."
+        />
+      </Section>
+    </div>
+  );
+};
+```
+
 ## File: tsconfig.json
 ```json
 {
@@ -973,6 +979,7 @@ export const client = edenTreaty<App>('http://localhost:3000');
 ## File: src/frontend/App.tsx
 ```typescript
 import {
+  ActionPanel,
   ConfigPanel,
   InputPanel,
   OutputPanel,
@@ -1005,6 +1012,7 @@ export default function App() {
 
           <div className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8">
             <InputPanel />
+            <ActionPanel />
             <StatsPanel />
             <OutputPanel />
           </div>
