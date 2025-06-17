@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { OutputFormat } from '../../backend/types';
+import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../state/atoms';
 
 interface OutputPanelProps {
-  output: string;
-  isLoading: boolean;
-  error: string | null;
-  format: OutputFormat;
+  // No props needed after Jotai integration
 }
 
 const languageMap: Record<OutputFormat, string> = {
@@ -29,7 +28,12 @@ const SkeletonLoader = () => (
 );
 
 
-export const OutputPanel: React.FC<OutputPanelProps> = ({ output, isLoading, error, format }) => {
+export const OutputPanel: React.FC<OutputPanelProps> = () => {
+  const output = useAtomValue(outputAtom);
+  const isLoading = useAtomValue(isLoadingAtom);
+  const error = useAtomValue(errorAtom);
+  const format = useAtomValue(outputFormatAtom);
+
   const [copyStatus, setCopyStatus] = useState('Copy');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);

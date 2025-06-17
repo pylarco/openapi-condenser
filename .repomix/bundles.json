@@ -27,6 +27,18 @@
         "vite.config.ts",
         "package.json"
       ]
+    },
+    "frontend-source-435": {
+      "name": "frontend-source",
+      "created": "2025-06-17T07:53:27.571Z",
+      "lastUsed": "2025-06-17T07:53:43.893Z",
+      "tags": [],
+      "files": [
+        "src/frontend",
+        "index.html",
+        "vite.config.ts",
+        "tsconfig.json"
+      ]
     }
   }
 }

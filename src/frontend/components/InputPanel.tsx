@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
+import { useSetAtom } from 'jotai';
 import { client } from '../client';
+import { specContentAtom, fileNameAtom } from '../state/atoms';
 
 interface InputPanelProps {
-  setSpecContent: (content: string) => void;
-  setFileName: (name: string) => void;
+  // No props needed after Jotai integration
 }
 
-// Use memo to prevent unnecessary re-renders
 const TabButton = memo<{tab: 'paste' | 'upload' | 'url', activeTab: 'paste' | 'upload' | 'url', onClick: (tab: 'paste' | 'upload' | 'url') => void, children: React.ReactNode}>(
   ({ tab, activeTab, onClick, children }) => (
     <button
@@ -18,7 +18,10 @@ const TabButton = memo<{tab: 'paste' | 'upload' | 'url', activeTab: 'paste' | 'u
   )
 );
 
-export const InputPanel: React.FC<InputPanelProps> = ({ setSpecContent, setFileName }) => {
+export const InputPanel: React.FC<InputPanelProps> = () => {
+  const setSpecContent = useSetAtom(specContentAtom);
+  const setFileName = useSetAtom(fileNameAtom);
+
   const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'url'>('paste');
   const [url, setUrl] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);

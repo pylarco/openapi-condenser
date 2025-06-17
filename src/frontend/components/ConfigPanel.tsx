@@ -1,13 +1,10 @@
 import React from 'react';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { FilterOptions, TransformOptions, OutputFormat } from '../../backend/types';
+import { configAtom, outputFormatAtom, isLoadingAtom, condenseSpecAtom } from '../state/atoms';
 
 interface ConfigPanelProps {
-  config: { filter: FilterOptions; transform: TransformOptions };
-  setConfig: React.Dispatch<React.SetStateAction<{ filter: FilterOptions; transform: TransformOptions }>>;
-  outputFormat: OutputFormat;
-  setOutputFormat: (format: OutputFormat) => void;
-  onCondense: () => void;
-  isLoading: boolean;
+  // No props needed after Jotai integration
 }
 
 const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
@@ -65,7 +62,12 @@ const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange
 ));
 
 
-export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, outputFormat, setOutputFormat, onCondense, isLoading }) => {
+export const ConfigPanel: React.FC<ConfigPanelProps> = () => {
+  const [config, setConfig] = useAtom(configAtom);
+  const [outputFormat, setOutputFormat] = useAtom(outputFormatAtom);
+  const isLoading = useAtomValue(isLoadingAtom);
+  const onCondense = useSetAtom(condenseSpecAtom);
+
   const handleFilterChange = (key: keyof FilterOptions, value: any) => {
     setConfig(c => ({ ...c, filter: { ...c.filter, [key]: value } }));
   };
@@ -146,7 +148,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ config, setConfig, out
       </Section>
       
       <button 
-        onClick={onCondense}
+        onClick={() => onCondense()}
         disabled={isLoading}
         className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
       >
