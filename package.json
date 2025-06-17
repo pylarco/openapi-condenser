@@ -9,6 +9,7 @@
     "dev": "concurrently \"vite\" \"bun run src/backend/server.ts\"",
     "start": "bun run src/backend/server.ts",
     "build": "vite build",
+    "deploy": "wrangler deploy src/backend/server.ts",
     "cli": "bun run src/backend/cli.ts",
     "test": "bun test"
   },
@@ -20,7 +21,8 @@
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "4.5.2",
     "concurrently": "^9.1.2",
-    "vite": "5.4.19"
+    "vite": "5.4.19",
+    "wrangler": "^3.57.0"
   },
   "peerDependencies": {
     "typescript": "^5"

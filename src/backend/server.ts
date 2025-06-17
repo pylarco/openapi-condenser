@@ -3,10 +3,19 @@ import { swagger } from '@elysiajs/swagger';
 import { cors } from '@elysiajs/cors';
 import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
-import { resolve } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
+
+// --- Worker-compatible SSRF Protection Helpers ---
+
+// A forgiving regex-based IP checker, as `node:net` is unavailable.
+const isIP = (ip: string): number => {
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const ipv6Regex = /(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/;
+  if (ipv4Regex.test(ip)) return 4;
+  if (ipv6Regex.test(ip)) return 6;
+  return 0;
+};
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -45,7 +54,36 @@ const isPrivateIP = (ip: string) => {
   );
 };
 
-export const app = new Elysia()
+// Worker-compatible DNS resolver using DNS-over-HTTPS
+const resolveDns = async (hostname: string): Promise<string[]> => {
+    const urls = [
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=AAAA`,
+    ];
+
+    const responses = await Promise.all(urls.map(url => 
+        fetch(url, { headers: { 'Accept': 'application/dns-json' } })
+    ));
+
+    const ips: string[] = [];
+    for (const response of responses) {
+        if (response.ok) {
+            const dnsResponse = await response.json() as { Answer?: { data: string }[] };
+            if (dnsResponse.Answer) {
+                dnsResponse.Answer.forEach(ans => ips.push(ans.data));
+            }
+        }
+    }
+    
+    if (ips.length === 0) {
+        throw new Error(`Could not resolve hostname: ${hostname}`);
+    }
+
+    return ips;
+};
+
+
+export const app = new Elysia({ prefix: '/api' })
   .use(swagger())
   .use(cors({
     origin: /^http:\/\/localhost(:\d+)?$/,
@@ -59,7 +97,7 @@ export const app = new Elysia()
       return { error: error.message };
     }
   })
-  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+  .get('/fetch-spec', async ({ query: { url }, set }) => {
     if (!url) {
         set.status = 400;
         return { error: 'URL parameter is required' };
@@ -85,12 +123,7 @@ export const app = new Elysia()
       } else {
         // If it's a domain name, resolve it and check all returned IPs
         try {
-          let resolved = await resolve(hostname);
-          if (!Array.isArray(resolved)) {
-            resolved = [resolved];
-          }
-          const addresses = resolved.map((a: any) => (typeof a === 'string' ? a : a.address)).filter(Boolean);
-
+          const addresses = await resolveDns(hostname);
           if (addresses.some(isPrivateIP)) {
             set.status = 403;
             return { error: 'Fetching specs from private or local network addresses is forbidden.' };
@@ -146,7 +179,7 @@ export const app = new Elysia()
     }
   })
   .post(
-    '/api/condense',
+    '/condense',
     async ({ body, set }) => {
       const config: ExtractorConfig = {
         source: {
@@ -273,7 +306,12 @@ export const app = new Elysia()
 
 export type App = typeof app;
 
+// This part is for standalone server execution (e.g., local dev with `bun run`)
+// It will be ignored in a Cloudflare Worker environment.
 if (import.meta.main) {
   app.listen(API_PORT);
-  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+  console.log(`🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}/api`);
 }
+
+// Default export for serverless environments like Cloudflare Workers
+export default app;

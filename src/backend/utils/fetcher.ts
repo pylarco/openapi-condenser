@@ -1,8 +1,18 @@
 import { promises as fs } from 'node:fs';
-import { extname } from 'node:path';
 import YAML from 'yaml';
 import type { OpenAPIExtractorResult, Source } from '../types';
 import { OpenAPI } from 'openapi-types';
+
+/**
+ * A simple worker-compatible replacement for path.extname
+ */
+const getExt = (path: string): string => {
+    const lastDotIndex = path.lastIndexOf('.');
+    if (lastDotIndex < 0) return '';
+    const lastSlashIndex = path.lastIndexOf('/');
+    if (lastSlashIndex > lastDotIndex) return '';
+    return path.substring(lastDotIndex);
+};
 
 /**
  * Fetch OpenAPI spec from local file, remote URL, or in-memory content
@@ -57,7 +67,7 @@ export const parseContent = (
     }
 
     // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
+    const ext = getExt(source).toLowerCase();
     if (ext === '.json') {
       return JSON.parse(content) as OpenAPI.Document;
     }

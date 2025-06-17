@@ -1,419 +1,68 @@
-Of course! I'll refactor your codebase to centralize constants. Shared constants will be moved to `src/shared/constants.ts`, frontend-specific ones to `src/frontend/constants.ts`, and backend-specific ones to `src/backend/constants.ts`. This will make your configuration much cleaner and easier to manage.
+I've analyzed your codebase and will make the necessary changes to ensure it's compatible with Cloudflare Workers. Here are the modifications:
+
+1.  **Server Logic (`src/backend/server.ts`)**: I'll replace Node.js-specific APIs (`dns`, `net`) with Cloudflare Worker-compatible alternatives for your SSRF protection logic. The server will also be adapted to the worker `fetch` handler format instead of listening on a port.
+2.  **Utilities (`src/backend/utils/fetcher.ts`)**: The `path.extname` function, which is a Node.js built-in, will be replaced with a lightweight, environment-agnostic helper function.
+3.  **Frontend Client & Constants**: I'll update your constants to use relative API paths. This is crucial for a worker environment where the frontend and backend are served from the same domain.
+4.  **Vite Configuration (`vite.config.ts`)**: The local development server proxy will be corrected to properly forward API requests from the frontend to the backend, which is essential now that we're using relative paths.
+5.  **Package Management (`package.json`)**: I'll add `wrangler` as a development dependency and include a new `deploy` script, making it straightforward to deploy your application to Cloudflare Workers.
+
+These changes will make your server-side logic ready for a serverless environment while maintaining your current local development workflow.
 
 Here are the code changes:
 
-```typescript // vite.config.ts
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      [API_PREFIX]: API_BASE_URL
-    }
-  }
-})
-```
-
-```typescript // src/backend/cli.ts
-#!/usr/bin/env bun
-import { parse } from 'cmd-ts';
-import { command, option, string, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig, OutputFormat } from './types';
-import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
-import { DEFAULT_CONFIG_PATH } from './constants';
-
-// Define CLI command
-const cmd = command({
-  name: 'openapi-condenser',
-  description: 'Extract and transform OpenAPI specifications',
-  args: {
-    config: option({
-      type: optional(string),
-      long: 'config',
-      short: 'c',
-      description: 'Path to configuration file',
-    }),
-    source: option({
-      type: optional(string),
-      long: 'source',
-      short: 's',
-      description: 'Source file path or URL',
-    }),
-    sourceType: option({
-      type: optional(string),
-      long: 'source-type',
-      description: 'Source type (local or remote)',
-    }),
-    format: option({
-      type: optional(string),
-      long: 'format',
-      short: 'f',
-      description: `Output format (${OUTPUT_FORMATS.join(', ')})`,
-    }),
-    outputPath: option({
-      type: optional(string),
-      long: 'output',
-      short: 'o',
-      description: 'Output file path',
-    }),
-    includePaths: option({
-      type: optional(string),
-      long: 'include-paths',
-      description: 'Include paths by glob patterns (comma-separated)',
-    }),
-    excludePaths: option({
-      type: optional(string),
-      long: 'exclude-paths',
-      description: 'Exclude paths by glob patterns (comma-separated)',
-    }),
-    includeTags: option({
-      type: optional(string),
-      long: 'include-tags',
-      description: 'Include endpoints by tag glob patterns (comma-separated)',
-    }),
-    excludeTags: option({
-      type: optional(string),
-      long: 'exclude-tags',
-      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
-    }),
-    methods: option({
-      type: optional(string),
-      long: 'methods',
-      description: 'Filter by HTTP methods (comma-separated)',
-    }),
-    includeDeprecated: flag({
-      long: 'include-deprecated',
-      description: 'Include deprecated endpoints',
-    }),
-    excludeSchemas: flag({
-      long: 'exclude-schemas',
-      description: 'Exclude component schemas from the output',
-    }),
-    excludeRequestBodies: flag({
-      long: 'exclude-request-bodies',
-      description: 'Exclude request bodies from the output',
-    }),
-    excludeResponses: flag({
-      long: 'exclude-responses',
-      description: 'Exclude responses from the output',
-    }),
-    verbose: flag({
-      long: 'verbose',
-      short: 'v',
-      description: 'Show verbose output',
-    }),
+```typescript // package.json
+{
+  "name": "openapi-condenser",
+  "main": "src/server.ts",
+  "type": "module",
+  "bin": {
+    "openapi-condenser": "src/cli.ts"
   },
-  handler: async (args) => {
-    try {
-      // Load configuration
-      const configPath = args.config || DEFAULT_CONFIG_PATH;
-      let config: ExtractorConfig;
-      
-      try {
-        config = await loadConfig(configPath);
-      } catch (error) {
-        if (args.source) {
-          const format = args.format || DEFAULT_OUTPUT_FORMAT;
-          if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
-            console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
-            process.exit(1);
-          }
-          // Create minimal config if no config file but source is provided
-          config = {
-            source: {
-              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
-              path: args.source
-            },
-            output: {
-              format: format as OutputFormat,
-            },
-          };
-        } else {
-          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
-        }
-      }
-      
-      // Merge command line args with config
-      const mergedConfig = mergeWithCommandLineArgs(config, args);
-      
-      if (args.verbose) {
-        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
-      }
-      
-      // Run extraction
-      const result = await extractOpenAPI(mergedConfig);
-      
-      if (!result.success) {
-        if (result.errors) {
-          console.error('Errors:', result.errors.join('\n'));
-        }
-        process.exit(1);
-      }
-      
-      if (!mergedConfig.output.destination) {
-        // Output to stdout if no destination specified
-        console.log(result.data);
-      } else if (args.verbose) {
-        console.log(`Output written to: ${mergedConfig.output.destination}`);
-      }
-      
-      if (result.warnings && result.warnings.length > 0) {
-        console.warn('Warnings:', result.warnings.join('\n'));
-      }
-    } catch (error) {
-      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
-    }
+  "scripts": {
+    "dev": "concurrently \"vite\" \"bun run src/backend/server.ts\"",
+    "start": "bun run src/backend/server.ts",
+    "build": "vite build",
+    "deploy": "wrangler deploy src/backend/server.ts",
+    "cli": "bun run src/backend/cli.ts",
+    "test": "bun test"
   },
-});
-
-// Run the command
-await parse(cmd, process.argv.slice(2));
-```
-
-```typescript // src/backend/constants.ts
-export const contentTypeMappings: ReadonlyArray<[string, string]> = [
-    ['json', 'json'],
-    ['form-data', 'form-data'],
-    ['x-www-form-urlencoded', 'form-urlencoded'],
-    ['xml', 'xml'],
-    ['text/plain', 'text'],
-];
-
-export const DEFAULT_CONFIG_PATH = './openapi-condenser.config.ts';
-export const TOKEN_CHAR_RATIO = 4;
-export const USER_AGENT = 'OpenAPI-Condenser/1.0';
-```
-
-```typescript // src/backend/extractor.ts
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
-import { fetchSpec } from './utils/fetcher';
-import { transformOpenAPI } from './transformer';
-import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { OpenAPIV3, OpenAPI } from 'openapi-types';
-import { HTTP_METHODS } from '../shared/constants';
-import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
-
-export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
-  if (!spec || typeof spec !== 'object') {
-    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/micromatch": "^4.0.7",
+    "@types/node": "20.19.1",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.5.2",
+    "concurrently": "^9.1.2",
+    "vite": "5.4.19",
+    "wrangler": "^3.57.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-markdown": "^6.3.3",
+    "@codemirror/lang-yaml": "^6.1.2",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@elysiajs/cors": "^1.3.3",
+    "@elysiajs/eden": "^1.3.2",
+    "@elysiajs/static": "^1.3.0",
+    "@elysiajs/swagger": "^1.3.0",
+    "@types/gsap": "^3.0.0",
+    "@uiw/react-codemirror": "^4.23.13",
+    "cmd-ts": "0.13.0",
+    "elysia": "1.3.4",
+    "fast-xml-parser": "4.5.3",
+    "gsap": "^3.13.0",
+    "jotai": "^2.12.5",
+    "micromatch": "^4.0.5",
+    "openapi-types": "^12.1.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "yaml": "^2.3.4"
   }
-
-  const compactSpecString = JSON.stringify(spec);
-  const prettySpecString = JSON.stringify(spec, null, 2);
-
-  const charCount = prettySpecString.length;
-  const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count, as it varies by model.
-  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
-
-  const validMethods = new Set(HTTP_METHODS);
-  const paths = Object.keys(spec.paths || {});
-  const operations = paths.reduce((count, path) => {
-    const pathItem = spec.paths[path];
-    if (pathItem && typeof pathItem === 'object') {
-      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
-    }
-    return count;
-  }, 0);
-  const schemas = Object.keys(spec.components?.schemas || {}).length;
-
-  return {
-    paths: paths.length,
-    operations: operations,
-    schemas: schemas,
-    charCount,
-    lineCount,
-    tokenCount,
-  };
-};
-
-export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
-    const charCount = output.length;
-    const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
-
-    return { charCount, lineCount, tokenCount };
 }
-
-const isV3Document = (
-  doc: OpenAPI.Document,
-): doc is OpenAPIV3.Document => {
-  return 'openapi' in doc && doc.openapi.startsWith('3');
-};
-
-/**
- * Extract OpenAPI information based on configuration
- */
-export const extractOpenAPI = async (
-  config: ExtractorConfig
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source);
-    
-    if (!result.success || !result.data) {
-      return result;
-    }
-    
-    if (typeof result.data === 'string') {
-      return {
-        success: false,
-        errors: ['Invalid spec format after fetching. Expected a document object.'],
-      };
-    }
-    
-    if (!isV3Document(result.data)) {
-      return {
-        success: false,
-        errors: ['Only OpenAPI v3 documents are supported.'],
-      };
-    }
-    
-    const beforeStats = calculateSpecStats(result.data);
-
-    // Apply transformations
-    const transformed = transformOpenAPI(
-      result.data,
-      config.filter,
-      config.transform
-    );
-    
-    const afterSpecStats = calculateSpecStats(transformed);
-    
-    // Format output
-    const formatter = getFormatter(config.output.format);
-    const formattedOutput = formatter.format(transformed);
-    
-    const afterOutputStats = calculateOutputStats(formattedOutput);
-
-    const afterStats: SpecStats = {
-      ...afterSpecStats,
-      ...afterOutputStats,
-    };
-    // Write output to file if destination is provided
-    if (config.output.destination) {
-      const outputPath = config.output.destination;
-      await fs.mkdir(dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
-    }
-    
-    return {
-      success: true,
-      data: formattedOutput,
-      stats: {
-        before: beforeStats,
-        after: afterStats,
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
-    };
-  }
-};
-
-/**
- * Load configuration from file
- */
-export const loadConfig = async (
-  configPath: string = DEFAULT_CONFIG_PATH
-): Promise<ExtractorConfig> => {
-  try {
-    // Convert file path to URL for import()
-    const fileUrl = `file://${join(process.cwd(), configPath)}`;
-    
-    // Import configuration
-    const module = await import(fileUrl);
-    return module.default as ExtractorConfig;
-  } catch (error) {
-    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Merge command line arguments with configuration
- */
-export const mergeWithCommandLineArgs = (
-  config: ExtractorConfig,
-  args: Record<string, any>
-): ExtractorConfig => {
-  // Deep copy to avoid mutating the original config object
-  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
-  
-  // Override source settings
-  if (args.source) {
-    result.source.path = args.source;
-  }
-  
-  if (args.sourceType) {
-    result.source.type = args.sourceType as 'local' | 'remote';
-  }
-  
-  // Override output settings
-  if (args.format) {
-    result.output.format = args.format;
-  }
-  
-  if (args.outputPath) {
-    result.output.destination = args.outputPath;
-  }
-  
-  // Initialize filter if it doesn't exist
-  if (!result.filter) {
-    result.filter = {};
-  }
-  
-  // Override filter settings
-  if (args.includePaths) {
-    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
-  }
-  if (args.excludePaths) {
-    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
-  }
-  
-  if (args.includeTags) {
-    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
-  }
-  if (args.excludeTags) {
-    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
-  }
-  
-  if (args.methods) {
-    result.filter.methods = args.methods.split(',');
-  }
-  
-  if (args.includeDeprecated) {
-    result.filter.includeDeprecated = args.includeDeprecated;
-  }
-
-  // Initialize transform if it doesn't exist
-  if (!result.transform) {
-    result.transform = {};
-  }
-
-  if (args.excludeSchemas) {
-    result.transform.includeSchemas = false;
-  }
-  if (args.excludeRequestBodies) {
-    result.transform.includeRequestBodies = false;
-  }
-  if (args.excludeResponses) {
-    result.transform.includeResponses = false;
-  }
-  
-  return result;
-};
 ```
 
 ```typescript // src/backend/server.ts
@@ -422,10 +71,19 @@ import { swagger } from '@elysiajs/swagger';
 import { cors } from '@elysiajs/cors';
 import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
-import { resolve } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
+
+// --- Worker-compatible SSRF Protection Helpers ---
+
+// A forgiving regex-based IP checker, as `node:net` is unavailable.
+const isIP = (ip: string): number => {
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const ipv6Regex = /(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/;
+  if (ipv4Regex.test(ip)) return 4;
+  if (ipv6Regex.test(ip)) return 6;
+  return 0;
+};
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -464,7 +122,36 @@ const isPrivateIP = (ip: string) => {
   );
 };
 
-export const app = new Elysia()
+// Worker-compatible DNS resolver using DNS-over-HTTPS
+const resolveDns = async (hostname: string): Promise<string[]> => {
+    const urls = [
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=AAAA`,
+    ];
+
+    const responses = await Promise.all(urls.map(url => 
+        fetch(url, { headers: { 'Accept': 'application/dns-json' } })
+    ));
+
+    const ips: string[] = [];
+    for (const response of responses) {
+        if (response.ok) {
+            const dnsResponse = await response.json() as { Answer?: { data: string }[] };
+            if (dnsResponse.Answer) {
+                dnsResponse.Answer.forEach(ans => ips.push(ans.data));
+            }
+        }
+    }
+    
+    if (ips.length === 0) {
+        throw new Error(`Could not resolve hostname: ${hostname}`);
+    }
+
+    return ips;
+};
+
+
+export const app = new Elysia({ prefix: '/api' })
   .use(swagger())
   .use(cors({
     origin: /^http:\/\/localhost(:\d+)?$/,
@@ -478,7 +165,7 @@ export const app = new Elysia()
       return { error: error.message };
     }
   })
-  .get('/api/fetch-spec', async ({ query: { url }, set }) => {
+  .get('/fetch-spec', async ({ query: { url }, set }) => {
     if (!url) {
         set.status = 400;
         return { error: 'URL parameter is required' };
@@ -504,12 +191,7 @@ export const app = new Elysia()
       } else {
         // If it's a domain name, resolve it and check all returned IPs
         try {
-          let resolved = await resolve(hostname);
-          if (!Array.isArray(resolved)) {
-            resolved = [resolved];
-          }
-          const addresses = resolved.map((a: any) => (typeof a === 'string' ? a : a.address)).filter(Boolean);
-
+          const addresses = await resolveDns(hostname);
           if (addresses.some(isPrivateIP)) {
             set.status = 403;
             return { error: 'Fetching specs from private or local network addresses is forbidden.' };
@@ -565,7 +247,7 @@ export const app = new Elysia()
     }
   })
   .post(
-    '/api/condense',
+    '/condense',
     async ({ body, set }) => {
       const config: ExtractorConfig = {
         source: {
@@ -692,222 +374,116 @@ export const app = new Elysia()
 
 export type App = typeof app;
 
+// This part is for standalone server execution (e.g., local dev with `bun run`)
+// It will be ignored in a Cloudflare Worker environment.
 if (import.meta.main) {
   app.listen(API_PORT);
-  console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
+  console.log(`🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}/api`);
 }
+
+// Default export for serverless environments like Cloudflare Workers
+export default app;
 ```
 
-```typescript // src/frontend/App.tsx
-import { useRef } from 'react';
-import {
-  ActionPanel,
-  ConfigPanel,
-  InputPanel,
-  OutputPanel,
-  StatsPanel,
-} from './components/features';
-import { usePanelEntrance } from './state/motion.reuse';
-import { APP_SUBTITLE, APP_TITLE, NAV_LINKS } from './constants';
+```typescript // src/backend/utils/fetcher.ts
+import { promises as fs } from 'node:fs';
+import YAML from 'yaml';
+import type { OpenAPIExtractorResult, Source } from '../types';
+import { OpenAPI } from 'openapi-types';
 
-export default function App() {
-  const configPanelRef = useRef<HTMLDivElement>(null);
-  const mainPanelsRef = useRef<HTMLDivElement>(null);
+/**
+ * A simple worker-compatible replacement for path.extname
+ */
+const getExt = (path: string): string => {
+    const lastDotIndex = path.lastIndexOf('.');
+    if (lastDotIndex < 0) return '';
+    const lastSlashIndex = path.lastIndexOf('/');
+    if (lastSlashIndex > lastDotIndex) return '';
+    return path.substring(lastDotIndex);
+};
 
-  usePanelEntrance(configPanelRef);
-  usePanelEntrance(mainPanelsRef);
+/**
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ */
+export const fetchSpec = async (
+  source: Source
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    let content: string;
+    let contentType: string | null = null;
+    
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      content = await fs.readFile(source.path, 'utf-8');
+    } else {
+      const response = await fetch(source.path);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
+      }
+      content = await response.text();
+      contentType = response.headers.get('Content-Type');
+    }
+    
+    const data = parseContent(content, source.path, contentType);
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
 
-  return (
-    <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
-      <header className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-sm border-b border-slate-700/50 z-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center">
-            <h1 className="text-xl font-bold text-white mr-4">
-              <span className="text-cyan-400">{APP_TITLE.split(' ')[0]}</span> {APP_TITLE.split(' ')[1]}
-            </h1>
-            <p className="text-sm text-slate-400 hidden sm:block">{APP_SUBTITLE}</p>
-          </div>
-          <nav className="flex items-center gap-4">
-            <a href={NAV_LINKS.SDK} className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
-              SDK
-            </a>
-            <a href={NAV_LINKS.API} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
-              API
-            </a>
-            <a href={NAV_LINKS.GITHUB} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
-              GitHub
-            </a>
-            <a 
-              href={NAV_LINKS.SPONSOR} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-pink-500 to-orange-500 text-white font-medium rounded-md hover:from-pink-600 hover:to-orange-600 transition-colors"
-            >
-              Sponsor
-            </a>
-          </nav>
-        </div>
-      </header>
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4 xl:col-span-3" ref={configPanelRef}>
-            <ConfigPanel />
-          </div>
+/**
+ * Parse content based on file extension or content type, with fallback.
+ */
+export const parseContent = (
+  content: string,
+  source: string,
+  contentType?: string | null,
+): OpenAPI.Document => {
+  try {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content) as OpenAPI.Document;
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content) as OpenAPI.Document;
+      }
+    }
 
-          <div
-            className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8"
-            ref={mainPanelsRef}
-          >
-            <InputPanel />
-            <ActionPanel />
-            <StatsPanel />
-            <OutputPanel />
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+    // 2. Try parsing based on file extension
+    const ext = getExt(source).toLowerCase();
+    if (ext === '.json') {
+      return JSON.parse(content) as OpenAPI.Document;
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content) as OpenAPI.Document;
+    } catch (jsonError) {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
+    );
+  }
+};
 ```
 
 ```typescript // src/frontend/client.ts
 import { edenTreaty } from '@elysiajs/eden';
 import type { App } from '../backend/server';
-import { API_BASE_URL } from '../shared/constants';
+import { API_PREFIX } from '../shared/constants';
 
 // Use with the specific older version
-export const client = edenTreaty<App>(API_BASE_URL);
-```
-
-```typescript // src/frontend/constants.ts
-import { json } from '@codemirror/lang-json';
-import { yaml } from '@codemirror/lang-yaml';
-import { markdown } from '@codemirror/lang-markdown';
-import type { OutputFormat } from '../shared/types';
-
-// --- App Info ---
-export const APP_TITLE = 'OpenAPI Condenser';
-export const APP_SUBTITLE = 'Pack your OpenAPI into AI-friendly formats';
-export const NAV_LINKS = {
-    SDK: '/sdk',
-    API: '/swagger',
-    GITHUB: 'https://github.com/repomix/openapi-condenser',
-    SPONSOR: 'https://github.com/sponsors/repomix',
-};
-
-// --- Input Panel ---
-export const INPUT_DEBOUNCE_DELAY = 300; // ms
-export const URL_FETCH_DEBOUNCE_DELAY = 500; // ms
-export const DEFAULT_SPEC_FILENAME = 'spec.json';
-export const DEFAULT_URL_FILENAME = 'spec.from.url';
-
-
-// --- Output Panel ---
-export const languageMap: { [K in OutputFormat]: () => any } = {
-  json: () => json(),
-  yaml: () => yaml(),
-  xml: () => markdown({}), // fallback for xml
-  markdown: () => markdown({}),
-};
-```
-
-```typescript // src/frontend/state/atoms.ts
-import { atom } from 'jotai';
-import { client } from '../client';
-import type { OutputFormat, SpecStats } from '../../shared/types';
-import { DEFAULT_SPEC_FILENAME } from '../constants';
-import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
-
-// --- Base State Atoms ---
-export const specContentAtom = atom<string>('');
-export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
-export const configAtom = atom(defaultConfig);
-export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
-
-// --- Derived/Async State Atoms ---
-export const outputAtom = atom<string>('');
-export const isLoadingAtom = atom<boolean>(false);
-export const errorAtom = atom<string | null>(null);
-
-type Stats = {
-  before: SpecStats;
-  after: SpecStats;
-} | null;
-
-export const statsAtom = atom<Stats>(null);
-
-// --- Utility Functions ---
-const normalizeStats = (stats: any): SpecStats => {
-    if (!stats) return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
-    return {
-        paths: Number(stats.paths) || 0,
-        operations: Number(stats.operations) || 0,
-        schemas: Number(stats.schemas) || 0,
-        charCount: Number(stats.charCount) || 0,
-        lineCount: Number(stats.lineCount) || 0,
-        tokenCount: Number(stats.tokenCount) || 0,
-    };
-};
-
-// --- Action Atom (for API calls and complex state updates) ---
-export const condenseSpecAtom = atom(
-    null, // This is a write-only atom
-    async (get, set) => {
-        const specContent = get(specContentAtom);
-        if (!specContent) {
-            set(errorAtom, 'Please provide an OpenAPI specification.');
-            return;
-        }
-
-        set(isLoadingAtom, true);
-        set(errorAtom, null);
-        set(outputAtom, '');
-        set(statsAtom, null);
-
-        const config = get(configAtom);
-        const payload = {
-            source: {
-                content: specContent,
-                path: get(fileNameAtom),
-                type: 'memory' as const
-            },
-            output: {
-                format: get(outputFormatAtom),
-            },
-            filter: config.filter,
-            transform: config.transform,
-        };
-
-        try {
-            const { data, error } = await client.api.condense.post(payload);
-            
-            if (error) {
-                let errorMessage = 'An unknown error occurred.';
-                const errorValue = error.value as any;
-                if (typeof errorValue === 'object' && errorValue !== null) {
-                    if ('errors' in errorValue && Array.isArray(errorValue.errors)) {
-                        errorMessage = errorValue.errors.join('\n');
-                    } else if ('message' in errorValue && typeof errorValue.message === 'string') {
-                        errorMessage = errorValue.message;
-                    }
-                }
-                set(errorAtom, errorMessage);
-            } else if (data) {
-                set(outputAtom, data.data);
-                if (data.stats) {
-                    set(statsAtom, {
-                        before: normalizeStats(data.stats.before),
-                        after: normalizeStats(data.stats.after),
-                    });
-                }
-            }
-        } catch (err) {
-            set(errorAtom, `Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-            set(isLoadingAtom, false);
-        }
-    }
-);
+export const client = edenTreaty<App>(API_PREFIX);
 ```
 
 ```typescript // src/shared/constants.ts
@@ -917,7 +493,7 @@ import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from '
 export const API_PORT = 3000;
 export const API_HOST = 'localhost';
 export const API_PREFIX = '/api';
-export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+export const API_BASE_URL = ''; // Now relative for worker/proxy compatibility
 
 // --- OpenAPI Semantics ---
 export const HTTP_METHODS: HttpMethod[] = [
@@ -945,4 +521,23 @@ export const defaultConfig: { filter: FilterOptions, transform: TransformOptions
     includeResponses: true,
   },
 };
+```
+
+```typescript // vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { API_PREFIX, API_HOST, API_PORT } from './src/shared/constants'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      [API_PREFIX]: {
+        target: `http://${API_HOST}:${API_PORT}`,
+        changeOrigin: true,
+      }
+    }
+  }
+})
 ```
