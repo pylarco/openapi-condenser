@@ -4,8 +4,9 @@ import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
 import { promises as fs } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { OpenAPIV3, OpenAPI } from 'openapi-types';
 
-export const calculateStats = (spec: any): SpecStats => {
+export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   if (!spec || typeof spec !== 'object') {
     return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
   }
@@ -28,16 +29,30 @@ export const calculateStats = (spec: any): SpecStats => {
     }
     return count;
   }, 0);
-  const schemas = Object.keys(spec.components?.schemas || {});
+  const schemas = Object.keys(spec.components?.schemas || {}).length;
 
   return {
     paths: paths.length,
     operations: operations,
-    schemas: schemas.length,
+    schemas: schemas,
     charCount,
     lineCount,
     tokenCount,
   };
+};
+
+export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
+    const charCount = output.length;
+    const lineCount = output.split('\n').length;
+    const tokenCount = Math.ceil(charCount / 4);
+
+    return { charCount, lineCount, tokenCount };
+}
+
+const isV3Document = (
+  doc: OpenAPI.Document,
+): doc is OpenAPIV3.Document => {
+  return 'openapi' in doc && doc.openapi.startsWith('3');
 };
 
 /**
@@ -50,11 +65,25 @@ export const extractOpenAPI = async (
     // Fetch OpenAPI spec
     const result = await fetchSpec(config.source);
     
-    if (!result.success) {
+    if (!result.success || !result.data) {
       return result;
     }
     
-    const beforeStats = calculateStats(result.data);
+    if (typeof result.data === 'string') {
+      return {
+        success: false,
+        errors: ['Invalid spec format after fetching. Expected a document object.'],
+      };
+    }
+    
+    if (!isV3Document(result.data)) {
+      return {
+        success: false,
+        errors: ['Only OpenAPI v3 documents are supported.'],
+      };
+    }
+    
+    const beforeStats = calculateSpecStats(result.data);
 
     // Apply transformations
     const transformed = transformOpenAPI(
@@ -63,12 +92,18 @@ export const extractOpenAPI = async (
       config.transform
     );
     
-    const afterStats = calculateStats(transformed);
+    const afterSpecStats = calculateSpecStats(transformed);
     
     // Format output
     const formatter = getFormatter(config.output.format);
     const formattedOutput = formatter.format(transformed);
     
+    const afterOutputStats = calculateOutputStats(formattedOutput);
+
+    const afterStats: SpecStats = {
+      ...afterSpecStats,
+      ...afterOutputStats,
+    };
     // Write output to file if destination is provided
     if (config.output.destination) {
       const outputPath = config.output.destination;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { getComponentNameFromRef, removeUnusedComponents, findRefsRecursive } from '../../src/backend/transformer';
+import { OpenAPIV3 } from 'openapi-types';
 
 describe('transformer.ts unit tests', () => {
     describe('getComponentNameFromRef', () => {
@@ -41,11 +42,13 @@ describe('transformer.ts unit tests', () => {
     });
 
     describe('removeUnusedComponents', () => {
-        const baseSpec = () => ({
+        const baseSpec = (): OpenAPIV3.Document => ({
+            openapi: '3.0.0',
+            info: { title: 'Test Spec', version: '1.0.0' },
             paths: {
                 '/users': {
                     get: {
-                        responses: { '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
+                        responses: { '200': { description: 'ok', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
                     }
                 }
             },
@@ -68,20 +71,22 @@ describe('transformer.ts unit tests', () => {
             const result = removeUnusedComponents(spec);
 
             // Kept schemas
-            expect(result.components.schemas.User).toBeDefined();
-            expect(result.components.schemas.Profile).toBeDefined();
-            expect(result.components.schemas.Avatar).toBeDefined();
+            expect(result.components?.schemas?.User).toBeDefined();
+            expect(result.components?.schemas?.Profile).toBeDefined();
+            expect(result.components?.schemas?.Avatar).toBeDefined();
 
             // Removed schemas
-            expect(result.components.schemas.UnusedSchema).toBeUndefined();
-            expect(result.components.schemas.OrphanedDependency).toBeUndefined();
+            expect(result.components?.schemas?.UnusedSchema).toBeUndefined();
+            expect(result.components?.schemas?.OrphanedDependency).toBeUndefined();
 
             // Removed component groups
-            expect(result.components.parameters).toBeUndefined();
+            expect(result.components?.parameters).toBeUndefined();
         });
 
         it('should remove the entire components object if nothing is left', () => {
-            const spec = {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
                 paths: { '/health': { get: { responses: { '200': { description: 'OK' } } } } },
                 components: { schemas: { Unused: { type: 'object' } } }
             };
@@ -90,9 +95,13 @@ describe('transformer.ts unit tests', () => {
         });
 
         it('should not modify a spec with no components object', () => {
-            const spec = { paths: {} };
+            const spec: OpenAPIV3.Document = { 
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
+                paths: {} 
+            };
             const result = removeUnusedComponents(JSON.parse(JSON.stringify(spec)));
             expect(result).toEqual(spec);
         });
     });
-}); 
+});

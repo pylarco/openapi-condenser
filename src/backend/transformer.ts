@@ -1,5 +1,12 @@
-import type { FilterOptions, TransformOptions, SchemaTransformer, FilterPatterns } from './types';
+import {
+  type FilterOptions,
+  type TransformOptions,
+  type SchemaTransformer,
+  type FilterPatterns,
+  type HttpMethod,
+} from './types';
 import micromatch from 'micromatch';
+import { OpenAPIV3 } from 'openapi-types';
 
 /**
  * Checks if an endpoint's tags match the provided patterns.
@@ -22,14 +29,13 @@ function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): 
   return matchesInclude && !matchesExclude;
 }
 
-
 /**
  * Filter paths based on configuration
  */
 export const filterPaths = (
-  paths: Record<string, any>, 
-  filterOptions: FilterOptions
-): Record<string, any> => {
+  paths: OpenAPIV3.PathsObject,
+  filterOptions: FilterOptions,
+): OpenAPIV3.PathsObject => {
   if (!filterOptions) return paths;
   
   const pathKeys = Object.keys(paths);
@@ -43,49 +49,83 @@ export const filterPaths = (
   }
 
   return filteredPathKeys.reduce((acc, path) => {
-    const methods = paths[path];
-    const filteredMethods = filterMethods(methods, filterOptions);
-    
-    if (Object.keys(filteredMethods).length > 0) {
-      acc[path] = filteredMethods;
+    const pathItem = paths[path];
+    if (pathItem) {
+      const filteredMethods = filterMethods(pathItem, filterOptions);
+
+      if (Object.keys(filteredMethods).length > 0) {
+        // Re-add non-method properties from the original pathItem
+        const newPathItem: OpenAPIV3.PathItemObject = { ...filteredMethods };
+        if (pathItem.summary) newPathItem.summary = pathItem.summary;
+        if (pathItem.description) newPathItem.description = pathItem.description;
+        if (pathItem.parameters) newPathItem.parameters = pathItem.parameters;
+        if (pathItem.servers) newPathItem.servers = pathItem.servers;
+        if (pathItem.$ref) newPathItem.$ref = pathItem.$ref;
+        
+        acc[path] = newPathItem;
+      }
     }
-    
+
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as OpenAPIV3.PathsObject);
 };
+
+const httpMethods: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+
+function isHttpMethod(method: string): method is HttpMethod {
+  return httpMethods.includes(method as HttpMethod);
+}
 
 /**
  * Filter HTTP methods based on configuration
  */
 export const filterMethods = (
-  methods: Record<string, any>,
-  filterOptions: FilterOptions
-): Record<string, any> => {
-  return Object.entries(methods).reduce((acc, [method, definition]) => {
-    // Skip if method is not in the filter list, but only if the list has items.
-    if (filterOptions.methods && filterOptions.methods.length > 0 && !filterOptions.methods.includes(method as any)) {
-      return acc;
+  pathItem: OpenAPIV3.PathItemObject,
+  filterOptions: FilterOptions,
+): OpenAPIV3.PathItemObject => {
+  const newPathItem: OpenAPIV3.PathItemObject = {};
+  
+  for (const key in pathItem) {
+    if (isHttpMethod(key)) {
+      const method: HttpMethod = key;
+      const operation = pathItem[method];
+
+      if (!operation) continue;
+
+      if (
+        filterOptions.methods &&
+        filterOptions.methods.length > 0 &&
+        !filterOptions.methods.includes(method)
+      ) {
+        continue;
+      }
+
+      if (!filterOptions.includeDeprecated && operation.deprecated) {
+        continue;
+      }
+
+      if (
+        filterOptions.tags &&
+        !matchesTags(operation.tags, filterOptions.tags)
+      ) {
+        continue;
+      }
+
+      newPathItem[method] = operation;
     }
-    
-    // Skip deprecated endpoints if configured
-    if (!filterOptions.includeDeprecated && definition.deprecated) {
-      return acc;
-    }
-    
-    // Filter by tags
-    if (filterOptions.tags && !matchesTags(definition.tags, filterOptions.tags)) {
-      return acc;
-    }
-    
-    acc[method] = definition;
-    return acc;
-  }, {} as Record<string, any>);
+  }
+  return newPathItem;
 };
 
 /**
  * Recursively find all $ref values in a given object.
  */
-export const findRefsRecursive = (obj: any, refs: Set<string>): void => {
+export const findRefsRecursive = (
+  obj: any, // Keeping `any` here as it's a deep recursive search
+  refs: Set<string>,
+): void => {
   if (!obj || typeof obj !== 'object') {
     return;
   }
@@ -139,7 +179,9 @@ export const getComponentNameFromRef = (ref: string): { type: string; name: stri
  * Removes all components (schemas, parameters, etc.) that are not referenced
  * in the remaining parts of the specification.
  */
-export const removeUnusedComponents = (spec: any): any => {
+export const removeUnusedComponents = (
+  spec: OpenAPIV3.Document,
+): OpenAPIV3.Document => {
   if (!spec.components) return spec;
 
   // 1. Find all initial references from the spec roots that are kept.
@@ -150,8 +192,8 @@ export const removeUnusedComponents = (spec: any): any => {
     spec.security,
     spec.info,
     spec.servers,
-    spec.webhooks,
-    spec.externalDocs
+    (spec as any).webhooks, // webhooks are in v3.1
+    spec.externalDocs,
   ];
 
   for (const root of specRoots) {
@@ -169,7 +211,7 @@ export const removeUnusedComponents = (spec: any): any => {
       const componentInfo = getComponentNameFromRef(ref);
       if (componentInfo) {
         const { type, name } = componentInfo;
-        const component = spec.components[type]?.[name];
+        const component = (spec.components as any)?.[type]?.[name];
         if (component) {
           findRefsRecursive(component, allRefs);
         }
@@ -178,24 +220,26 @@ export const removeUnusedComponents = (spec: any): any => {
   } while (allRefs.size > previousSize);
 
   // 3. Build a new components object with only the referenced items.
-  const newComponents: Record<string, any> = {};
-  for (const componentType in spec.components) {
-    const componentGroup = spec.components[componentType];
-    const newComponentGroup: Record<string, any> = {};
-    for (const componentName in componentGroup) {
-      const ref = `#/components/${componentType}/${componentName}`;
-      if (allRefs.has(ref)) {
-        newComponentGroup[componentName] = componentGroup[componentName];
+  const newComponents: OpenAPIV3.ComponentsObject = {};
+  if (spec.components) {
+    for (const componentType in spec.components) {
+      const componentGroup = (spec.components as any)[componentType];
+      const newComponentGroup: Record<string, any> = {};
+      for (const componentName in componentGroup) {
+        const ref = `#/components/${componentType}/${componentName}`;
+        if (allRefs.has(ref)) {
+          newComponentGroup[componentName] = componentGroup[componentName];
+        }
       }
-    }
-    if (Object.keys(newComponentGroup).length > 0) {
-      newComponents[componentType] = newComponentGroup;
+      if (Object.keys(newComponentGroup).length > 0) {
+        (newComponents as any)[componentType] = newComponentGroup;
+      }
     }
   }
 
   // 4. Replace the old components object or remove it if empty.
   if (Object.keys(newComponents).length > 0) {
-    spec.components = newComponents;
+    (spec.components as any) = newComponents;
   } else {
     delete spec.components;
   }
@@ -207,29 +251,35 @@ export const removeUnusedComponents = (spec: any): any => {
  * Transform OpenAPI schema based on configuration
  */
 export const transformSchema = (
-  schema: any,
+  node: any,
   transformOptions: TransformOptions,
-  currentDepth = 0
+  currentDepth = 0,
 ): any => {
-  if (!schema || typeof schema !== 'object') {
-    return schema;
+  if (!node || typeof node !== 'object') {
+    return node;
+  }
+  
+  if ('$ref' in node) {
+    return node;
   }
   
   // Handle maximum depth
-  if (transformOptions.maxDepth !== undefined && currentDepth >= transformOptions.maxDepth) {
-    if (Array.isArray(schema)) {
-      return schema.length > 0 ? ['...'] : [];
-    }
-    return { truncated: true, reason: `Max depth of ${transformOptions.maxDepth} reached` };
+  if (
+    transformOptions.maxDepth !== undefined &&
+    currentDepth >= transformOptions.maxDepth
+  ) {
+    return {
+      description: `Truncated: Max depth of ${transformOptions.maxDepth} reached`,
+    };
   }
   
-  // Handle arrays
-  if (Array.isArray(schema)) {
-    return schema.map(item => transformSchema(item, transformOptions, currentDepth + 1));
+  if (Array.isArray(node)) {
+    return node
+      .map(item => transformSchema(item, transformOptions, currentDepth + 1))
+      .filter(Boolean);
   }
-  
-  // Handle objects
-  const result = { ...schema };
+
+  const result: { [key: string]: any } = { ...node };
   
   // Remove examples if configured
   if (transformOptions.removeExamples && 'example' in result) {
@@ -249,47 +299,57 @@ export const transformSchema = (
     delete result.summary;
   }
   
-  // Process all properties recursively
-  Object.keys(result).forEach(key => {
-    if (typeof result[key] === 'object' && result[key] !== null) {
-      result[key] = transformSchema(result[key], transformOptions, currentDepth + 1);
+  // Recursively transform nested properties
+  for (const key in result) {
+    const prop = result[key];
+    if (typeof prop === 'object' && prop !== null) {
+      result[key] = transformSchema(
+        prop,
+        transformOptions,
+        currentDepth + 1,
+      );
     }
-  });
+  }
   
   return result;
 };
 
 /**
- * Transform the entire OpenAPI document based on configuration
+ * Applies both filtering and transformations to an entire OpenAPI document.
  */
 export const transformOpenAPI = (
-  openapi: any,
+  openapi: OpenAPIV3.Document,
   filterOpts?: FilterOptions,
-  transformOpts?: TransformOptions
-): any => {
-  // Create a deep copy to avoid mutating the original object
-  let result = JSON.parse(JSON.stringify(openapi));
-  
-  // Filter paths first
-  if (result.paths && filterOpts) {
-    result.paths = filterPaths(result.paths, filterOpts);
-  }
-  
-  // Then, remove any components that are no longer referenced
-  result = removeUnusedComponents(result);
+  transformOpts?: TransformOptions,
+): OpenAPIV3.Document => {
+  let transformed: OpenAPIV3.Document = JSON.parse(JSON.stringify(openapi));
 
-  // Apply other transformations to the entire remaining spec
+  // Apply filtering
+  if (filterOpts && transformed.paths) {
+    transformed.paths = filterPaths(transformed.paths, filterOpts);
+  }
+
+  // Apply transformations on the entire document
   if (transformOpts) {
-    result = transformSchema(result, transformOpts);
+    transformed = transformSchema(
+      transformed,
+      transformOpts,
+    ) as OpenAPIV3.Document;
   }
 
-  return result;
+  // Then, remove any components that are no longer referenced
+  transformed = removeUnusedComponents(transformed);
+
+  return transformed;
 };
 
 /**
  * Higher-order function for composing transformers
  */
-export const composeTransformers = 
-  (...transformers: SchemaTransformer[]): SchemaTransformer => 
-  (schema: any) => 
-    transformers.reduce((result, transformer) => transformer(result), schema);
+export const composeTransformers =
+  (...transformers: SchemaTransformer[]): SchemaTransformer =>
+  (schema: OpenAPIV3.SchemaObject) =>
+    transformers.reduce(
+      (currentSchema, transformer) => transformer(currentSchema),
+      schema,
+    );

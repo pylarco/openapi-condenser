@@ -3,9 +3,10 @@ import { formatAsYaml } from './yaml.ts';
 import { formatAsXml } from './xml.ts';
 import { formatAsMarkdown } from './markdown.ts';
 import type { OutputFormat } from '../types.ts';
+import { OpenAPIV3 } from 'openapi-types';
 
 export interface Formatter {
-  format: (data: any) => string;
+  format: (data: OpenAPIV3.Document) => string;
 }
 
 export const getFormatter = (format: OutputFormat): Formatter => {

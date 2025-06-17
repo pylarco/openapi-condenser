@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { OutputFormat } from '../../backend/types';
-import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../state/atoms';
+import CodeMirror from '@uiw/react-codemirror';
+import { json } from '@codemirror/lang-json';
+import { yaml } from '@codemirror/lang-yaml';
+import { markdown } from '@codemirror/lang-markdown';
+import { oneDark } from '@codemirror/theme-one-dark';
+import type { OutputFormat } from '../../../../backend/types';
+import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
 
 interface OutputPanelProps {
   // No props needed after Jotai integration
 }
 
-const languageMap: Record<OutputFormat, string> = {
-  json: 'json',
-  yaml: 'yaml',
-  xml: 'xml',
-  markdown: 'markdown',
+const languageMap: { [K in OutputFormat]: () => any } = {
+  json: () => json(),
+  yaml: () => yaml(),
+  xml: () => markdown({}), // fallback for xml
+  markdown: () => markdown({}),
 };
 
 const SkeletonLoader = () => (
@@ -123,9 +126,14 @@ export const OutputPanel: React.FC<OutputPanelProps> = () => {
           </div>
         )}
         {!isLoading && !error && output && (
-            <SyntaxHighlighter language={languageMap[format]} style={vscDarkPlus} customStyle={{ background: 'transparent', margin: 0, padding: '1rem', height: '100%', minHeight: '100%' }} codeTagProps={{style:{fontFamily: 'monospace'}}} wrapLines={true} showLineNumbers>
-                {output}
-            </SyntaxHighlighter>
+            <CodeMirror
+                value={output}
+                height="100%"
+                extensions={[languageMap[format](), oneDark]}
+                readOnly={true}
+                theme="dark"
+                style={{ height: '100%', minHeight: '100%' }}
+            />
         )}
         {!isLoading && !error && !output && (
             <div className="absolute inset-0 flex items-center justify-center text-slate-500">

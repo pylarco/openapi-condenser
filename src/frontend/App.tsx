@@ -1,7 +1,9 @@
-import { ConfigPanel } from './components/ConfigPanel';
-import { InputPanel } from './components/InputPanel';
-import { OutputPanel } from './components/OutputPanel';
-import { StatsPanel } from './components/StatsPanel';
+import {
+  ConfigPanel,
+  InputPanel,
+  OutputPanel,
+  StatsPanel,
+} from './components/features';
 
 export default function App() {
   return (

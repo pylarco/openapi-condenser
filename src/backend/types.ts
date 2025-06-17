@@ -1,4 +1,7 @@
+import type { OpenAPI, OpenAPIV3 } from 'openapi-types';
+
 export type OutputFormat = 'json' | 'yaml' | 'xml' | 'markdown';
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head' | 'trace';
 
 export type FilterPatterns = {
   include?: string[];
@@ -9,7 +12,7 @@ export type FilterOptions = {
   paths?: FilterPatterns;
   tags?: FilterPatterns;
   operationIds?: FilterPatterns;
-  methods?: ('get' | 'post' | 'put' | 'delete' | 'patch' | 'options' | 'head')[];
+  methods?: HttpMethod[];
   includeDeprecated?: boolean;
 };
 
@@ -59,7 +62,7 @@ export type SpecStats = {
 
 export type OpenAPIExtractorResult = {
   success: boolean;
-  data?: any;
+  data?: OpenAPI.Document | string;
   stats?: {
     before: SpecStats;
     after: SpecStats;
@@ -68,4 +71,6 @@ export type OpenAPIExtractorResult = {
   errors?: string[];
 };
 
-export type SchemaTransformer = (schema: any) => any;
+export type SchemaTransformer = (
+  schema: OpenAPIV3.SchemaObject,
+) => OpenAPIV3.SchemaObject;

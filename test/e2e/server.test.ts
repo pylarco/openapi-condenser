@@ -30,7 +30,6 @@ describe('E2E API Tests', () => {
   describe('/api/fetch-spec', () => {
     it('should fetch a valid remote OpenAPI spec', async () => {
       const { data, error, status } = await api['api']['fetch-spec'].get({
-        // @ts-ignore
         query: { url: publicSpecUrl },
       });
 
@@ -138,13 +137,17 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+        
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).toEqual(['/users']);
         expect(result.paths['/users/{userId}']).toBeUndefined();
         // Check stats
-        expect(data?.stats.before.paths).toBe(4);
-        expect(data?.stats.after.paths).toBe(1);
-        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(1);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
     });
     
     it('should filter paths based on exclude glob pattern', async () => {
@@ -156,13 +159,17 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).not.toInclude('/internal/status');
         expect(Object.keys(result.paths)).toHaveLength(3);
         // Check stats
-        expect(data?.stats.before.paths).toBe(4);
-        expect(data?.stats.after.paths).toBe(3);
-        expect(data?.stats.after.charCount).toBeLessThan(data?.stats.before.charCount);
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(3);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
     });
 
     it('should filter by tags', async () => {
@@ -174,9 +181,12 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(Object.keys(result.paths)).toEqual(['/users', '/users/{userId}']);
-        expect(data?.stats.after.operations).toBe(2);
+        expect(data.stats?.after.operations).toBe(2);
     });
 
     it('should exclude deprecated endpoints by default', async () => {
@@ -185,7 +195,10 @@ describe('E2E API Tests', () => {
             output: { format: 'json' },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+        
+        const result = JSON.parse(data.data);
         expect(result.paths['/internal/status']).toBeUndefined();
     });
 
@@ -198,7 +211,10 @@ describe('E2E API Tests', () => {
             },
         });
         
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(result.paths['/internal/status']).toBeDefined();
     });
 
@@ -211,13 +227,17 @@ describe('E2E API Tests', () => {
             },
         });
 
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
         // Only '/items' path should remain
         expect(Object.keys(result.paths)).toEqual(['/items']);
         // Only 'Item' schema should remain, 'User' and 'UnusedSchema' should be gone
         expect(Object.keys(result.components.schemas)).toEqual(['Item']);
-        expect(data?.stats.before.schemas).toBe(3);
-        expect(data?.stats.after.schemas).toBe(1);
+        expect(data.stats.before.schemas).toBe(3);
+        expect(data.stats.after.schemas).toBe(1);
     });
 
     it('should apply transformations like removing descriptions', async () => {
@@ -229,7 +249,10 @@ describe('E2E API Tests', () => {
             },
         });
 
-        const result = JSON.parse(data!.data);
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
         expect(result.info.description).toBeUndefined();
         expect(result.paths['/users'].get.description).toBeUndefined();
         expect(result.components.schemas.User.properties.id.description).toBeUndefined();
@@ -246,7 +269,7 @@ describe('E2E API Tests', () => {
 
         expect(status).toBe(400);
 
-        if (error?.value && 'success' in error.value && 'errors' in error.value) {
+        if (error?.value && 'success' in error.value && 'errors' in error.value && Array.isArray(error.value.errors)) {
             expect(error.value.success).toBe(false);
             expect(error.value.errors).toContain('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
         } else {

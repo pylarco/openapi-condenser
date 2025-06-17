@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
-import { useSetAtom } from 'jotai';
-import { client } from '../client';
-import { specContentAtom, fileNameAtom } from '../state/atoms';
+import { useSetAtom, useAtom } from 'jotai';
+import { client } from '../../../client';
+import { specContentAtom, fileNameAtom } from '../../../state/atoms';
 
 interface InputPanelProps {
   // No props needed after Jotai integration
@@ -19,7 +19,7 @@ const TabButton = memo<{tab: 'paste' | 'upload' | 'url', activeTab: 'paste' | 'u
 );
 
 export const InputPanel: React.FC<InputPanelProps> = () => {
-  const setSpecContent = useSetAtom(specContentAtom);
+  const [specContent, setSpecContent] = useAtom(specContentAtom);
   const setFileName = useSetAtom(fileNameAtom);
 
   const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'url'>('paste');
@@ -29,6 +29,27 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [localSpecContent, setLocalSpecContent] = useState(specContent);
+
+  // Debounce effect for spec content
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (specContent !== localSpecContent) {
+        setSpecContent(localSpecContent);
+      }
+    }, 300); // 300ms debounce delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [localSpecContent, specContent, setSpecContent]);
+
+  // When global state changes (e.g., from file upload or URL fetch), update local state
+  useEffect(() => {
+    if (specContent !== localSpecContent) {
+        setLocalSpecContent(specContent);
+    }
+  }, [specContent]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,11 +70,11 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
   }, [setSpecContent, setFileName]);
 
   const handlePasteChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setSpecContent(event.target.value);
+    setLocalSpecContent(event.target.value);
     setFileName('spec.json'); // Assume json for pasted content
     setFetchError(null);
     setUploadedFileName(null);
-  }, [setSpecContent, setFileName]);
+  }, [setFileName]);
   
   const handleTabClick = useCallback((tab: 'paste' | 'upload' | 'url') => {
     setActiveTab(tab);
@@ -134,6 +155,7 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
         {activeTab === 'paste' && (
           <textarea
             ref={textareaRef}
+            value={localSpecContent}
             onChange={handlePasteChange}
             placeholder="Paste your OpenAPI (JSON or YAML) spec here..."
             className="w-full h-64 bg-transparent text-slate-300 p-4 resize-none focus:outline-none placeholder-slate-500 font-mono text-sm"
