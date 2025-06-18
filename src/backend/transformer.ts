@@ -5,12 +5,11 @@ import {
   type FilterPatterns,
   type HttpMethod,
 } from '../shared/types';
-import micromatch from 'micromatch';
 import { OpenAPIV3 } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
 
 /**
- * Checks if an endpoint's tags match the provided patterns.
+ * Checks if an endpoint's tags match the provided patterns (exact match).
  */
 function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): boolean {
   const { include, exclude } = tagPatterns;
@@ -24,14 +23,14 @@ function matchesTags(endpointTags: string[] = [], tagPatterns: FilterPatterns): 
     return !include?.length;
   }
   
-  const matchesInclude = include?.length ? micromatch.some(endpointTags, include) : true;
-  const matchesExclude = exclude?.length ? micromatch.some(endpointTags, exclude) : false;
+  const matchesInclude = include?.length ? endpointTags.some(tag => include.includes(tag)) : true;
+  const matchesExclude = exclude?.length ? endpointTags.some(tag => exclude.includes(tag)) : false;
 
   return matchesInclude && !matchesExclude;
 }
 
 /**
- * Filter paths based on configuration
+ * Filter paths based on configuration (exact match).
  */
 export const filterPaths = (
   paths: OpenAPIV3.PathsObject,
@@ -43,10 +42,10 @@ export const filterPaths = (
   let filteredPathKeys = pathKeys;
 
   if (filterOptions.paths?.include?.length) {
-    filteredPathKeys = micromatch(filteredPathKeys, filterOptions.paths.include, { dot: true });
+    filteredPathKeys = filteredPathKeys.filter(key => filterOptions.paths!.include!.includes(key));
   }
   if (filterOptions.paths?.exclude?.length) {
-    filteredPathKeys = micromatch.not(filteredPathKeys, filterOptions.paths.exclude, { dot: true });
+    filteredPathKeys = filteredPathKeys.filter(key => !filterOptions.paths!.exclude!.includes(key));
   }
 
   return filteredPathKeys.reduce((acc, path) => {

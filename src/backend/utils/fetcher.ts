@@ -1,10 +1,18 @@
-import { extname } from 'node:path';
 import YAML from 'yaml';
 import type { OpenAPIExtractorResult, Source } from '../../shared/types';
 import { OpenAPI } from 'openapi-types';
 
+function getExtension(path: string): string {
+    const filename = path.split('?')[0]?.split('/').pop();
+    if (!filename) return '';
+    const lastDot = filename.lastIndexOf('.');
+    // < 1 to ignore leading dots (e.g. '.env') and files with no extension
+    if (lastDot < 1) return ''; 
+    return filename.substring(lastDot);
+}
+
 /**
- * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ * Fetch OpenAPI spec from remote URL or in-memory content
  */
 export const fetchSpec = async (
   source: Source
@@ -15,16 +23,15 @@ export const fetchSpec = async (
     
     if (source.type === 'memory') {
       content = source.content;
-    } else if (source.type === 'local') {
-      const { promises: fs } = await import('node:fs');
-      content = await fs.readFile(source.path, 'utf-8');
-    } else {
+    } else if (source.type === 'remote') {
       const response = await fetch(source.path);
       if (!response.ok) {
         throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
       }
       content = await response.text();
       contentType = response.headers.get('Content-Type');
+    } else {
+        throw new Error(`Unsupported source type. Only 'memory' and 'remote' are supported in this environment.`);
     }
     
     const data = parseContent(content, source.path, contentType);
@@ -57,7 +64,7 @@ export const parseContent = (
     }
 
     // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
+    const ext = getExtension(source).toLowerCase();
     if (ext === '.json') {
       return JSON.parse(content) as OpenAPI.Document;
     }

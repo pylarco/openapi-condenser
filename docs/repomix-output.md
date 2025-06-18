@@ -234,19 +234,6 @@ export default {
 };
 ```
 
-## File: wrangler.toml
-```toml
-name = "openapi-condenser"
-main = "src/backend/worker.ts"
-compatibility_date = "2024-03-22"
-
-[site]
-bucket = "./dist"
-
-[build]
-command = "npm run build"
-```
-
 ## File: src/frontend/constants.ts
 ```typescript
 import { json } from '@codemirror/lang-json';
@@ -278,6 +265,20 @@ export const languageMap: { [K in OutputFormat]: () => any } = {
   xml: () => markdown({}), // fallback for xml
   markdown: () => markdown({}),
 };
+```
+
+## File: wrangler.toml
+```toml
+name = "openapi-condenser"
+main = "src/backend/worker.ts"
+compatibility_date = "2024-03-22"
+compatibility_flags = ["nodejs_compat"]
+
+[site]
+bucket = "./dist"
+
+[build]
+command = "npm run build"
 ```
 
 ## File: vite.config.ts
@@ -650,89 +651,6 @@ export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checke
 };
 ```
 
-## File: src/backend/utils/fetcher.ts
-```typescript
-import { promises as fs } from 'node:fs';
-import { extname } from 'node:path';
-import YAML from 'yaml';
-import type { OpenAPIExtractorResult, Source } from '../../shared/types';
-import { OpenAPI } from 'openapi-types';
-
-/**
- * Fetch OpenAPI spec from local file, remote URL, or in-memory content
- */
-export const fetchSpec = async (
-  source: Source
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    let content: string;
-    let contentType: string | null = null;
-    
-    if (source.type === 'memory') {
-      content = source.content;
-    } else if (source.type === 'local') {
-      content = await fs.readFile(source.path, 'utf-8');
-    } else {
-      const response = await fetch(source.path);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
-      }
-      content = await response.text();
-      contentType = response.headers.get('Content-Type');
-    }
-    
-    const data = parseContent(content, source.path, contentType);
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Parse content based on file extension or content type, with fallback.
- */
-export const parseContent = (
-  content: string,
-  source: string,
-  contentType?: string | null,
-): OpenAPI.Document => {
-  try {
-    // 1. Try parsing based on content type for remote files
-    if (contentType) {
-      if (contentType.includes('json')) {
-        return JSON.parse(content) as OpenAPI.Document;
-      }
-      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
-        return YAML.parse(content) as OpenAPI.Document;
-      }
-    }
-
-    // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
-    if (ext === '.json') {
-      return JSON.parse(content) as OpenAPI.Document;
-    }
-    if (ext === '.yaml' || ext === '.yml') {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-    
-    // 3. Fallback: try parsing as JSON, then YAML
-    try {
-      return JSON.parse(content) as OpenAPI.Document;
-    } catch (jsonError) {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
-    );
-  }
-};
-```
-
 ## File: src/frontend/client.ts
 ```typescript
 import { edenTreaty } from '@elysiajs/eden';
@@ -1066,6 +984,89 @@ export const getFormatter = (format: OutputFormat): Formatter => {
 };
 ```
 
+## File: src/backend/utils/fetcher.ts
+```typescript
+import { extname } from 'node:path';
+import YAML from 'yaml';
+import type { OpenAPIExtractorResult, Source } from '../../shared/types';
+import { OpenAPI } from 'openapi-types';
+
+/**
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ */
+export const fetchSpec = async (
+  source: Source
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    let content: string;
+    let contentType: string | null = null;
+    
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      const { promises: fs } = await import('node:fs');
+      content = await fs.readFile(source.path, 'utf-8');
+    } else {
+      const response = await fetch(source.path);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
+      }
+      content = await response.text();
+      contentType = response.headers.get('Content-Type');
+    }
+    
+    const data = parseContent(content, source.path, contentType);
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Parse content based on file extension or content type, with fallback.
+ */
+export const parseContent = (
+  content: string,
+  source: string,
+  contentType?: string | null,
+): OpenAPI.Document => {
+  try {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content) as OpenAPI.Document;
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content) as OpenAPI.Document;
+      }
+    }
+
+    // 2. Try parsing based on file extension
+    const ext = extname(source).toLowerCase();
+    if (ext === '.json') {
+      return JSON.parse(content) as OpenAPI.Document;
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content) as OpenAPI.Document;
+    } catch (jsonError) {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
+    );
+  }
+};
+```
+
 ## File: src/backend/types.ts
 ```typescript
 //TODO: delete this file
@@ -1077,8 +1078,6 @@ import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } f
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
 import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
@@ -1178,6 +1177,8 @@ export const extractOpenAPI = async (
     };
     // Write output to file if destination is provided
     if (config.output.destination) {
+      const { promises: fs } = await import('node:fs');
+      const { dirname } = await import('node:path');
       const outputPath = config.output.destination;
       await fs.mkdir(dirname(outputPath), { recursive: true });
       await fs.writeFile(outputPath, formattedOutput, 'utf-8');
@@ -1206,6 +1207,7 @@ export const loadConfig = async (
   configPath: string = DEFAULT_CONFIG_PATH
 ): Promise<ExtractorConfig> => {
   try {
+    const { join } = await import('node:path');
     // Convert file path to URL for import()
     const fileUrl = `file://${join(process.cwd(), configPath)}`;
     
@@ -1835,7 +1837,7 @@ import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
 import { checkUrlSafety } from './utils/ssrf';
 
-export const app = new Elysia()
+export const app = new Elysia({ aot: false })
   .use(swagger())
   .use(cors({
     origin: [/^http:\/\/localhost(:\d+)?$/, /\.pages\.dev$/],

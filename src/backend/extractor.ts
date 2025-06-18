@@ -4,7 +4,7 @@ import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
-import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
+import { TOKEN_CHAR_RATIO } from './constants';
 
 const calculateStringStats = (content: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
   const charCount = content.length;
@@ -99,14 +99,6 @@ export const extractOpenAPI = async (
       ...afterSpecStats,
       ...afterOutputStats,
     };
-    // Write output to file if destination is provided
-    if (config.output.destination) {
-      const { promises: fs } = await import('node:fs');
-      const { dirname } = await import('node:path');
-      const outputPath = config.output.destination;
-      await fs.mkdir(dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
-    }
     
     return {
       success: true,
@@ -122,97 +114,4 @@ export const extractOpenAPI = async (
       errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
     };
   }
-};
-
-/**
- * Load configuration from file
- */
-export const loadConfig = async (
-  configPath: string = DEFAULT_CONFIG_PATH
-): Promise<ExtractorConfig> => {
-  try {
-    const { join } = await import('node:path');
-    // Convert file path to URL for import()
-    const fileUrl = `file://${join(process.cwd(), configPath)}`;
-    
-    // Import configuration
-    const module = await import(fileUrl);
-    return module.default as ExtractorConfig;
-  } catch (error) {
-    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Merge command line arguments with configuration
- */
-export const mergeWithCommandLineArgs = (
-  config: ExtractorConfig,
-  args: Record<string, any>
-): ExtractorConfig => {
-  // Deep copy to avoid mutating the original config object
-  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
-  
-  // Override source settings
-  if (args.source) {
-    result.source.path = args.source;
-  }
-  
-  if (args.sourceType) {
-    result.source.type = args.sourceType as 'local' | 'remote';
-  }
-  
-  // Override output settings
-  if (args.format) {
-    result.output.format = args.format;
-  }
-  
-  if (args.outputPath) {
-    result.output.destination = args.outputPath;
-  }
-  
-  // Initialize filter if it doesn't exist
-  if (!result.filter) {
-    result.filter = {};
-  }
-  
-  // Override filter settings
-  if (args.includePaths) {
-    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
-  }
-  if (args.excludePaths) {
-    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
-  }
-  
-  if (args.includeTags) {
-    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
-  }
-  if (args.excludeTags) {
-    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
-  }
-  
-  if (args.methods) {
-    result.filter.methods = args.methods.split(',');
-  }
-  
-  if (args.includeDeprecated) {
-    result.filter.includeDeprecated = args.includeDeprecated;
-  }
-
-  // Initialize transform if it doesn't exist
-  if (!result.transform) {
-    result.transform = {};
-  }
-
-  if (args.excludeSchemas) {
-    result.transform.includeSchemas = false;
-  }
-  if (args.excludeRequestBodies) {
-    result.transform.includeRequestBodies = false;
-  }
-  if (args.excludeResponses) {
-    result.transform.includeResponses = false;
-  }
-  
-  return result;
 };
