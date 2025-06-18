@@ -88,7 +88,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
 
     // Parameters
     if (operation.parameters?.length) {
-      output += `\n**Parameters**\n`;
+      output += `\nP:\n`;
       for (const paramRef of operation.parameters) {
         const param = resolveRef(paramRef, data);
         const schema = param.schema as OpenAPIV3.SchemaObject;
@@ -105,7 +105,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
       if (requestBody.content) {
         const contentEntries = Object.entries(requestBody.content);
         if (contentEntries.length > 0) {
-            output += `\n**Request Body**\n`;
+            output += `\nB:\n`;
             for (const [contentType, mediaType] of contentEntries) {
                 output += `* \`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\`\n`;
             }
@@ -115,9 +115,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
 
     // Responses
     if (operation.responses) {
-      output += `\n**Responses**\n`;
-      const groupedResponses: { [key: string]: string[] } = {};
-      
+      output += `\nR:\n`;
       for (const [code, responseRef] of Object.entries(operation.responses)) {
         const response = resolveRef(responseRef, data);
         const responseIdParts: string[] = [];
@@ -132,11 +130,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
             responseId = response.description?.replace(/\n/g, ' ') || 'No description';
         }
 
-        groupedResponses[responseId] = [...(groupedResponses[responseId] || []), code];
-      }
-
-      for (const [responseId, codes] of Object.entries(groupedResponses)) {
-           output += `* \`${codes.join(', ')}\`: ${responseId}\n`;
+        output += `* \`${code}\`: ${responseId}\n`;
       }
     }
     return output;
@@ -146,19 +140,19 @@ const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV
     let output = '';
     const schema = resolveRef(schemaRef, data);
       
-    output += `### ${name}\n`;
+    output += `### S: ${name}\n`;
     if (schema.description) {
         output += `\n${schema.description.replace(/\n/g, ' ')}\n`;
     }
 
     if (schema.type === 'object' && schema.properties) {
-        output += '\n**Properties**\n';
+        output += '\nProps:\n';
         output += formatProperties(schema.properties, schema.required, data, 0);
     } else if (schema.type === 'array' && schema.items) {
         output += `\n**Type**: Array of \`${formatSchemaType(schema.items, data)}\`\n`;
         const resolvedItems = resolveRef(schema.items, data);
         if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += "\n**Item Properties**\n";
+             output += "\nItem Props:\n";
              output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 0);
         }
     } else if (schema.type) {
