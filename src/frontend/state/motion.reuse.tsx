@@ -62,38 +62,28 @@ export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
 }
 
 export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
-  const tl = useRef<gsap.core.Timeline>();
   const isInitialMount = useRef(true);
 
-  // This effect runs once to create the timeline.
   useLayoutEffect(() => {
     if (!el.current) return;
     const knob = el.current.nextElementSibling?.nextElementSibling;
     const background = el.current.nextElementSibling;
     if (!knob || !background) return;
 
-    tl.current = gsap.timeline({ paused: true })
-      .to(background, { backgroundColor: 'rgb(6 182 212)', duration: 0.2, ease: 'power2.inOut' })
-      .to(knob, { x: 16, duration: 0.2, ease: 'power2.inOut' }, '<');
-      
-    return () => { tl.current?.kill() };
-  }, [el]);
+    // The color for bg-slate-600 from tailwind config
+    const offColor = 'rgb(71 85 105)'; 
+    // The color for bg-cyan-500 from the original timeline animation
+    const onColor = 'rgb(6 182 212)';
 
-  // This effect controls the animation based on the `checked` state.
-  useLayoutEffect(() => {
-    if (tl.current) {
-      if (isInitialMount.current) {
-        // On first render, just set the state, don't animate
-        tl.current.progress(checked ? 1 : 0);
-        isInitialMount.current = false;
-      } else {
-        // On subsequent renders, animate
-        if (checked) {
-          tl.current.play();
-        } else {
-          tl.current.reverse();
-        }
-      }
+    if (isInitialMount.current) {
+      // On first render, just set the state, don't animate
+      gsap.set(knob, { x: checked ? 16 : 0 });
+      gsap.set(background, { backgroundColor: checked ? onColor : offColor });
+      isInitialMount.current = false;
+    } else {
+      // On subsequent renders, animate
+      gsap.to(knob, { x: checked ? 16 : 0, duration: 0.2, ease: 'power2.inOut' });
+      gsap.to(background, { backgroundColor: checked ? onColor : offColor, duration: 0.2, ease: 'power2.inOut' });
     }
-  }, [checked]);
-}
+  }, [checked, el]);
+};

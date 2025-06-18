@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   ActionPanel,
   ConfigPanel,
@@ -12,9 +12,30 @@ import { APP_SUBTITLE, APP_TITLE, NAV_LINKS } from './constants';
 export default function App() {
   const configPanelRef = useRef<HTMLDivElement>(null);
   const mainPanelsRef = useRef<HTMLDivElement>(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(true);
 
   usePanelEntrance(configPanelRef);
   usePanelEntrance(mainPanelsRef);
+
+  const handleScroll = useCallback(() => {
+    const scrollThreshold = 400;
+    const bottomThreshold = 20;
+
+    setShowScrollToTop(window.scrollY > scrollThreshold);
+
+    const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomThreshold;
+    setShowScrollToBottom(!isAtBottom);
+  }, []);
+
+  useEffect(() => {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      handleScroll(); // Initial check
+      return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
@@ -64,6 +85,30 @@ export default function App() {
           </div>
         </div>
       </main>
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+        {showScrollToTop && (
+            <button 
+                onClick={scrollToTop} 
+                className="p-3 bg-cyan-500/80 hover:bg-cyan-500 text-white rounded-full shadow-lg transition-all hover:scale-110 backdrop-blur-sm"
+                aria-label="Scroll to top"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+            </button>
+        )}
+        {showScrollToBottom && (
+            <button 
+                onClick={scrollToBottom} 
+                className="p-3 bg-cyan-500/80 hover:bg-cyan-500 text-white rounded-full shadow-lg transition-all hover:scale-110 backdrop-blur-sm"
+                aria-label="Scroll to bottom"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+        )}
+      </div>
     </div>
   );
 }

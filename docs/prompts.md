@@ -225,17 +225,5 @@ Failed to load resource: the server responded with a status of 400 (Bad Request)
 
 -----------------
 
-### `GET` /groups/{GroupID}/invite
-
-Get group invite
-
-P:
-* `GroupID` (*path*): `GroupID` (required) - Group ID
-
-R:
-* `200`: `json` -> `GroupInvite`
-* `400`: `json` -> `ResponseError`
-* `401`: `json` -> `ResponseError`
-* `403`: `json` -> `ResponseError`
-* `404`: `json` -> `ResponseError`
-* `500`: `json` -> `ResponseError`
+1. FE: tranformation toggle switch has bug not reacting but working, but no animation
+2. add scroll to bottom and top button at certain scroll position

@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { InfoTooltip } from './InfoTooltip';
 import { useSwitchAnimation } from '../../state/motion.reuse';
 
-export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => {
+export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = ({ label, checked, onChange, tooltip }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     useSwitchAnimation(inputRef, checked);
 
@@ -19,4 +19,4 @@ export const Switch: React.FC<{ label: string; checked: boolean; onChange: (chec
             </div>
         </label>
     )
-});
+};

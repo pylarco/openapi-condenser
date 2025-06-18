@@ -1,246 +1,249 @@
-Of course! I can make the output format more condensed as you requested. Here are the necessary changes for `src/backend/formatters/concise-text.ts`.
+Of course! I'll fix the animation bug with the transformation toggle switches and add the scroll-to-top/bottom buttons for you. Here are the code changes:
 
-```typescript // src/backend/formatters/concise-text.ts
-import { OpenAPIV3 } from 'openapi-types';
-import { contentTypeMappings } from '../constants';
-import { HTTP_METHODS } from '../../shared/constants';
+### 1. Fixing the Switch Animation
 
-const resolveRef = <T extends object>(
-  refObj: OpenAPIV3.ReferenceObject | T,
-  doc: OpenAPIV3.Document,
-): T => {
-  if (!refObj || typeof refObj !== 'object' || !('$ref' in refObj))
-    return refObj as T;
+The animation bug was due to how the animation timeline was being created and managed, especially when the component re-rendered. I've replaced it with a more robust and simpler implementation that is not affected by parent component re-renders. I've also removed `React.memo` from the `Switch` component as it was ineffective with the previous setup and is no longer necessary with the fix.
 
-  const refPath = refObj.$ref.replace('#/components/', '').split('/');
-  let current: any = doc.components;
-  for (const part of refPath) {
-    current = current?.[part];
-  }
-  return (current || refObj) as T;
+### 2. Adding Scroll Buttons
+
+I've added two floating buttons to the main application view:
+- A "scroll to top" button that appears when you scroll down the page.
+- A "scroll to bottom" button that is visible until you reach the end of the page.
+
+These will improve navigation on long pages with extensive output.
+
+Here are the complete changes for the affected files:
+
+```typescript // src/frontend/App.tsx
+import { useRef, useState, useEffect, useCallback } from 'react';
+import {
+  ActionPanel,
+  ConfigPanel,
+  InputPanel,
+  OutputPanel,
+  StatsPanel,
+} from './components/features';
+import { usePanelEntrance } from './state/motion.reuse';
+import { APP_SUBTITLE, APP_TITLE, NAV_LINKS } from './constants';
+
+export default function App() {
+  const configPanelRef = useRef<HTMLDivElement>(null);
+  const mainPanelsRef = useRef<HTMLDivElement>(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(true);
+
+  usePanelEntrance(configPanelRef);
+  usePanelEntrance(mainPanelsRef);
+
+  const handleScroll = useCallback(() => {
+    const scrollThreshold = 400;
+    const bottomThreshold = 20;
+
+    setShowScrollToTop(window.scrollY > scrollThreshold);
+
+    const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - bottomThreshold;
+    setShowScrollToBottom(!isAtBottom);
+  }, []);
+
+  useEffect(() => {
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      handleScroll(); // Initial check
+      return () => window.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+
+  return (
+    <div className="min-h-screen bg-slate-900 font-sans text-slate-300">
+      <header className="fixed top-0 left-0 right-0 bg-slate-900/50 backdrop-blur-sm border-b border-slate-700/50 z-20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center">
+            <h1 className="text-xl font-bold text-white mr-4">
+              <span className="text-cyan-400">{APP_TITLE.split(' ')[0]}</span> {APP_TITLE.split(' ')[1]}
+            </h1>
+            <p className="text-sm text-slate-400 hidden sm:block">{APP_SUBTITLE}</p>
+          </div>
+          <nav className="flex items-center gap-4">
+            <a href={NAV_LINKS.SDK} className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              SDK
+            </a>
+            <a href={NAV_LINKS.API} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              API
+            </a>
+            <a href={NAV_LINKS.GITHUB} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+              GitHub
+            </a>
+            <a 
+              href={NAV_LINKS.SPONSOR} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-pink-500 to-orange-500 text-white font-medium rounded-md hover:from-pink-600 hover:to-orange-600 transition-colors"
+            >
+              Sponsor
+            </a>
+          </nav>
+        </div>
+      </header>
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-4 xl:col-span-3" ref={configPanelRef}>
+            <ConfigPanel />
+          </div>
+
+          <div
+            className="lg:col-span-8 xl:col-span-9 flex flex-col gap-8"
+            ref={mainPanelsRef}
+          >
+            <InputPanel />
+            <ActionPanel />
+            <StatsPanel />
+            <OutputPanel />
+          </div>
+        </div>
+      </main>
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+        {showScrollToTop && (
+            <button 
+                onClick={scrollToTop} 
+                className="p-3 bg-cyan-500/80 hover:bg-cyan-500 text-white rounded-full shadow-lg transition-all hover:scale-110 backdrop-blur-sm"
+                aria-label="Scroll to top"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+            </button>
+        )}
+        {showScrollToBottom && (
+            <button 
+                onClick={scrollToBottom} 
+                className="p-3 bg-cyan-500/80 hover:bg-cyan-500 text-white rounded-full shadow-lg transition-all hover:scale-110 backdrop-blur-sm"
+                aria-label="Scroll to bottom"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+```typescript // src/frontend/components/ui/Switch.tsx
+import React, { useRef } from 'react';
+import { InfoTooltip } from './InfoTooltip';
+import { useSwitchAnimation } from '../../state/motion.reuse';
+
+export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = ({ label, checked, onChange, tooltip }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    useSwitchAnimation(inputRef, checked);
+
+    return (
+        <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-slate-300 flex items-center gap-2">
+                {label}
+                {tooltip && <InfoTooltip text={tooltip} />}
+            </span>
+            <div className="relative">
+                <input ref={inputRef} type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+                <div className="block w-10 h-6 rounded-full bg-slate-600"></div>
+                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full"></div>
+            </div>
+        </label>
+    )
 };
+```
 
-const formatSchemaType = (
-  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
-  doc: OpenAPIV3.Document,
-): string => {
-  if (!schema) return 'any';
-  if ('$ref' in schema) {
-    return schema.$ref.split('/').pop() || 'any';
-  }
-  if (schema.type === 'array' && schema.items) {
-    const itemType = formatSchemaType(schema.items, doc);
-    return `array<${itemType}>`;
-  }
-  return schema.type || 'any';
-};
+```typescript // src/frontend/state/motion.reuse.tsx
+import { useLayoutEffect, useRef } from 'react'
+import gsap from 'gsap'
 
-const shortenContentType = (contentType: string): string => {
-    for (const [key, shortName] of contentTypeMappings) {
-        if (contentType.includes(key)) {
-            return shortName;
-        }
-    }
-    return contentType;
-};
+export const usePanelEntrance = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return
 
-const shortenParamIn = (paramIn: string): string => {
-    switch (paramIn) {
-        case 'query': return 'q';
-        case 'path': return 'p';
-        case 'header': return 'h';
-        case 'cookie': return 'c';
-        default: return paramIn;
-    }
-};
-
-
-const formatProperties = (
-  properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
-  required: string[] | undefined,
-  doc: OpenAPIV3.Document,
-  indent = 0,
-): string => {
-  let propsMarkdown = '';
-  const indentStr = '  '.repeat(indent);
-
-  for (const [propName, propSchema] of Object.entries(properties)) {
-    const resolvedPropSchema = resolveRef(propSchema, doc);
-    const isRequired = required?.includes(propName);
-    const requiredStr = isRequired ? ' (required)' : '';
-    
-    const typeStr = formatSchemaType(propSchema, doc);
-    const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
-
-    propsMarkdown += `${indentStr}* \`${propName}\`: \`${typeStr}\`${requiredStr}${descriptionStr}\n`;
-
-    let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
-    const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
-
-    if (resolvedPropSchema.type === 'object') {
-        nestedPropsSchema = resolvedPropSchema;
-    } else if (resolvedItems?.type === 'object') {
-        nestedPropsSchema = resolvedItems;
-    }
-
-    if (nestedPropsSchema?.properties) {
-        propsMarkdown += formatProperties(nestedPropsSchema.properties, nestedPropsSchema.required, doc, indent + 1);
-    }
-  }
-  return propsMarkdown;
-};
-
-const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    output += `### \`${method.toUpperCase()}\` ${path}\n`;
-
-    const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
-    if (description) {
-      output += `\n${description}\n`;
-    }
-
-    // Parameters
-    if (operation.parameters?.length) {
-      output += `\nP:\n`;
-      for (const paramRef of operation.parameters) {
-        const param = resolveRef(paramRef, data);
-        const schema = param.schema as OpenAPIV3.SchemaObject;
-        const type = schema ? formatSchemaType(schema, data) : 'any';
-        const required = param.required ? ' (required)' : '';
-        const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `* \`${param.name}\` ${shortenParamIn(param.in)}: \`${type}\`${required}${paramDesc}\n`;
-      }
-    }
-    
-    // Request Body
-    if (operation.requestBody) {
-      const requestBody = resolveRef(operation.requestBody, data);
-      if (requestBody.content) {
-        const contentEntries = Object.entries(requestBody.content);
-        if (contentEntries.length > 0) {
-            output += `\nB:\n`;
-            for (const [contentType, mediaType] of contentEntries) {
-                output += `* \`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\`\n`;
-            }
-        }
-      }
-    }
-
-    // Responses
-    if (operation.responses) {
-      output += `\nR:\n`;
-      
-      const responseGroups: Map<string, string[]> = new Map();
-
-      for (const [code, responseRef] of Object.entries(operation.responses)) {
-        const response = resolveRef(responseRef, data);
-        let responseId = 'No description';
-
-        if (response.content) {
-            // Take the first content type's schema as the identifier.
-            const firstContent = Object.values(response.content)[0];
-            if (firstContent?.schema) {
-                responseId = `\`${formatSchemaType(firstContent.schema, data)}\``;
-            }
-        }
-        
-        if (responseId === 'No description' && response.description) {
-            // Fallback to description if no content/schema
-            responseId = response.description.replace(/\n/g, ' ');
-        }
-
-        if (!responseGroups.has(responseId)) {
-            responseGroups.set(responseId, []);
-        }
-        responseGroups.get(responseId)!.push(code);
-      }
-
-      for (const [responseId, codes] of responseGroups.entries()) {
-        const codesStr = codes.map(c => `\`${c}\``).join(', ');
-        output += `* ${codesStr}: ${responseId}\n`;
-      }
-    }
-    return output;
+    gsap.from(el.current, {
+      opacity: 0,
+      y: 50,
+      duration: 0.5,
+      ease: 'power3.out',
+    })
+  }, [el])
 }
 
-const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    const schema = resolveRef(schemaRef, data);
-      
-    output += `### S: ${name}\n`;
-    if (schema.description) {
-        output += `\n${schema.description.replace(/\n/g, ' ')}\n`;
-    }
+export const useButtonHover = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, { scale: 1.05, duration: 0.2, ease: 'power2.out' });
 
-    if (schema.type === 'object' && schema.properties) {
-        output += '\nProps:\n';
-        output += formatProperties(schema.properties, schema.required, data, 0);
-    } else if (schema.type === 'array' && schema.items) {
-        output += `\n**Type**: Array of \`${formatSchemaType(schema.items, data)}\`\n`;
-        const resolvedItems = resolveRef(schema.items, data);
-        if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += "\nItem Props:\n";
-             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 0);
-        }
-    } else if (schema.type) {
-        output += `\n**Type**: \`${schema.type}\`\n`;
+    const onEnter = () => tl.play();
+    const onLeave = () => tl.reverse();
+
+    el.current.addEventListener('mouseenter', onEnter);
+    el.current.addEventListener('mouseleave', onLeave);
+
+    return () => {
+      el.current?.removeEventListener('mouseenter', onEnter);
+      el.current?.removeEventListener('mouseleave', onLeave);
     }
-    return output;
+  }, [el]);
 }
 
-/**
- * Format data as a concise text format for LLMs.
- */
-export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
-  const parts: string[] = [];
+export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
 
-  // Info Block
-  if (data.info) {
-    let infoBlock = `# ${data.info.title}`;
-    if (data.info.version) {
-        infoBlock += ` (v${data.info.version})`;
+    const input = el.current.querySelector('input, textarea');
+    if (!input) return;
+
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, {
+      boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.5)',
+      borderColor: 'rgb(34 211 238)',
+      duration: 0.2,
+      ease: 'power2.out'
+    });
+
+    const onFocus = () => tl.play();
+    const onBlur = () => tl.reverse();
+
+    input.addEventListener('focus', onFocus);
+    input.addEventListener('blur', onBlur);
+
+    return () => {
+      input.removeEventListener('focus', onFocus);
+      input.removeEventListener('blur', onBlur);
     }
-    if (data.info.description) {
-        infoBlock += `\n\n${data.info.description.trim()}`;
+  }, [el]);
+}
+
+export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
+  const isInitialMount = useRef(true);
+
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const knob = el.current.nextElementSibling?.nextElementSibling;
+    const background = el.current.nextElementSibling;
+    if (!knob || !background) return;
+
+    // The color for bg-slate-600 from tailwind config
+    const offColor = 'rgb(71 85 105)'; 
+    // The color for bg-cyan-500 from the original timeline animation
+    const onColor = 'rgb(6 182 212)';
+
+    if (isInitialMount.current) {
+      // On first render, just set the state, don't animate
+      gsap.set(knob, { x: checked ? 16 : 0 });
+      gsap.set(background, { backgroundColor: checked ? onColor : offColor });
+      isInitialMount.current = false;
+    } else {
+      // On subsequent renders, animate
+      gsap.to(knob, { x: checked ? 16 : 0, duration: 0.2, ease: 'power2.inOut' });
+      gsap.to(background, { backgroundColor: checked ? onColor : offColor, duration: 0.2, ease: 'power2.inOut' });
     }
-    parts.push(infoBlock);
-  }
-
-  const endpoints: string[] = [];
-  // Endpoints
-  if (data.paths) {
-    for (const [path, pathItem] of Object.entries(data.paths)) {
-      if (!pathItem) continue;
-      
-      const validMethods = Object.keys(pathItem).filter(method => 
-        HTTP_METHODS.includes(method as any)
-      ) as (keyof typeof pathItem)[];
-
-      for (const method of validMethods) {
-        const operation = pathItem[method] as OpenAPIV3.OperationObject;
-        if (!operation || typeof operation !== 'object' || !('responses' in operation)) continue;
-        
-        endpoints.push(formatEndpoint(method, path, operation, data));
-      }
-    }
-  }
-  
-  if (endpoints.length > 0) {
-      parts.push("## Endpoints\n\n" + endpoints.join('\n---\n\n'));
-  }
-
-  const schemas: string[] = [];
-  // Schemas
-  if (data.components?.schemas) {
-    for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
-        schemas.push(formatSchema(name, schemaRef, data));
-    }
-  }
-
-  if (schemas.length > 0) {
-      parts.push("## Schemas\n\n" + schemas.join('\n---\n\n'));
-  }
-  
-  return parts.join('\n\n---\n\n').trim();
+  }, [checked, el]);
 };
 ```
