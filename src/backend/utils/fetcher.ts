@@ -1,4 +1,3 @@
-import { promises as fs } from 'node:fs';
 import { extname } from 'node:path';
 import YAML from 'yaml';
 import type { OpenAPIExtractorResult, Source } from '../../shared/types';
@@ -17,6 +16,7 @@ export const fetchSpec = async (
     if (source.type === 'memory') {
       content = source.content;
     } else if (source.type === 'local') {
+      const { promises: fs } = await import('node:fs');
       content = await fs.readFile(source.path, 'utf-8');
     } else {
       const response = await fetch(source.path);

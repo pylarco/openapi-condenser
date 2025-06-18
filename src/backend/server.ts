@@ -7,7 +7,7 @@ import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
 import { checkUrlSafety } from './utils/ssrf';
 
-export const app = new Elysia()
+export const app = new Elysia({ aot: false })
   .use(swagger())
   .use(cors({
     origin: [/^http:\/\/localhost(:\d+)?$/, /\.pages\.dev$/],

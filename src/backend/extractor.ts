@@ -2,8 +2,6 @@ import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } f
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
 import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
 import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
@@ -103,6 +101,8 @@ export const extractOpenAPI = async (
     };
     // Write output to file if destination is provided
     if (config.output.destination) {
+      const { promises: fs } = await import('node:fs');
+      const { dirname } = await import('node:path');
       const outputPath = config.output.destination;
       await fs.mkdir(dirname(outputPath), { recursive: true });
       await fs.writeFile(outputPath, formattedOutput, 'utf-8');
@@ -131,6 +131,7 @@ export const loadConfig = async (
   configPath: string = DEFAULT_CONFIG_PATH
 ): Promise<ExtractorConfig> => {
   try {
+    const { join } = await import('node:path');
     // Convert file path to URL for import()
     const fileUrl = `file://${join(process.cwd(), configPath)}`;
     
