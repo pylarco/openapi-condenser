@@ -1,5 +1,4 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { isIP } from 'is-ip';
 
 const isPrivateIP = (ip: string): boolean => {
   // IPv6 loopback and private ranges (ULA, etc.)
@@ -36,6 +35,30 @@ const isPrivateIP = (ip: string): boolean => {
   );
 };
 
+// Use DNS-over-HTTPS to resolve hostnames in a web-worker compatible way
+const dohLookup = async (hostname: string): Promise<{ address: string }[]> => {
+    // Using Cloudflare's own DoH resolver
+    const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}`;
+    try {
+        const response = await fetch(url, {
+            headers: { 'accept': 'application/dns-json' }
+        });
+        if (!response.ok) {
+            console.error(`DoH lookup failed for ${hostname} with status: ${response.status}`);
+            return [];
+        }
+        const dnsResult = await response.json() as { Answer?: { data: string, type: number }[] };
+        
+        // Filter for A (1) and AAAA (28) records
+        return dnsResult.Answer?.filter(ans => ans.type === 1 || ans.type === 28)
+                             .map(ans => ({ address: ans.data })) ?? [];
+    } catch (e) {
+        console.error(`Error during DoH lookup for ${hostname}:`, e);
+        return [];
+    }
+}
+
+
 type SafetyResult = { safe: true } | { safe: false, message: string, status: number };
 
 export const checkUrlSafety = async (url: string): Promise<SafetyResult> => {
@@ -47,20 +70,19 @@ export const checkUrlSafety = async (url: string): Promise<SafetyResult> => {
         }
         
         const hostname = urlObj.hostname;
-        const isHostnameAnIp = isIP(hostname) !== 0;
+        const isHostnameAnIp = isIP(hostname);
 
         if (isHostnameAnIp) {
             if (isPrivateIP(hostname)) {
                 return { safe: false, message: 'Fetching specs from private or local network addresses is forbidden.', status: 403 };
             }
         } else {
-            try {
-                const addresses = await lookup(hostname, { all: true });
-                if (addresses.some(addr => isPrivateIP(addr.address))) {
-                    return { safe: false, message: 'Fetching specs from private or local network addresses is forbidden.', status: 403 };
-                }
-            } catch (dnsError) {
+            const addresses = await dohLookup(hostname);
+            if (addresses.length === 0) {
                 return { safe: false, message: `Could not resolve hostname: ${hostname}`, status: 400 };
+            }
+            if (addresses.some(addr => isPrivateIP(addr.address))) {
+                return { safe: false, message: 'Fetching specs from private or local network addresses is forbidden.', status: 403 };
             }
         }
 

@@ -27,12 +27,17 @@
     "tsconfig.json",
     "package.json",
     "vite.config.ts",
-    "test"
+    "wrangler.toml"
+    // "test"
   ],
   "ignore": {
     "useGitignore": true,
     "useDefaultPatterns": true,
-    "customPatterns": []
+    "customPatterns": [
+      "src/frontend/components",
+      "src/frontend/styles.css",
+      "src/shared"
+    ]
   },
   "security": {
     "enableSecurityCheck": false
