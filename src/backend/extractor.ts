@@ -1,4 +1,4 @@
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } from './types';
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } from '../shared/types';
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
@@ -8,18 +8,19 @@ import { OpenAPIV3, OpenAPI } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';
 import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
 
+const calculateStringStats = (content: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
+  const charCount = content.length;
+  const lineCount = content.split('\n').length;
+  const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
+  return { charCount, lineCount, tokenCount };
+}
+
 export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   if (!spec || typeof spec !== 'object') {
     return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
   }
 
-  const prettySpecString = JSON.stringify(spec, null, 2);
-
-  const charCount = prettySpecString.length;
-  const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count.
-  // Using charCount (from pretty-printed string) for consistency with how formatted output stats are calculated.
-  const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
+  const stringStats = calculateStringStats(JSON.stringify(spec, null, 2));
 
   const validMethods = new Set(HTTP_METHODS);
   const pathItems = spec.paths || {};
@@ -37,18 +38,12 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
     paths: paths.length,
     operations: operations,
     schemas: schemas,
-    charCount,
-    lineCount,
-    tokenCount,
+    ...stringStats,
   };
 };
 
 export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
-    const charCount = output.length;
-    const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
-
-    return { charCount, lineCount, tokenCount };
+    return calculateStringStats(output);
 }
 
 const isV3Document = (

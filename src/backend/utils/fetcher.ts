@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { extname } from 'node:path';
 import YAML from 'yaml';
-import type { OpenAPIExtractorResult, Source } from '../types';
+import type { OpenAPIExtractorResult, Source } from '../../shared/types';
 import { OpenAPI } from 'openapi-types';
 
 /**

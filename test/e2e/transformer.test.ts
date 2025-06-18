@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { extractOpenAPI } from '../../src/backend/extractor';
-import type { ExtractorConfig, OpenAPIExtractorResult } from '../../src/backend/types';
+import type { ExtractorConfig, OpenAPIExtractorResult } from '../../src/shared/types';
 
 const complexTestSpec = {
   openapi: '3.0.0',

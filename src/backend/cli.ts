@@ -2,7 +2,7 @@
 import { parse } from 'cmd-ts';
 import { command, option, string, optional, flag } from 'cmd-ts';
 import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig, OutputFormat } from './types';
+import type { ExtractorConfig, OutputFormat } from '../shared/types';
 import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
 import { DEFAULT_CONFIG_PATH } from './constants';
 

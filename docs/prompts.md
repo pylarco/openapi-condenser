@@ -207,6 +207,11 @@ make the algorithm efficient but effective to be running in serverless for cost.
 
 -------------------
 
+1. bug: clicking toggle not reacting, also no animation
+2. the body panels looks faded, I believe something to do with opacity in motion.reuse.tsx
+
+---------------------
+
 prepare the project so that ready to deploy to wrangler cloudflare worker. along with backend, frontend
 
 ------------------

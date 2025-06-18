@@ -4,7 +4,7 @@ import {
   type SchemaTransformer,
   type FilterPatterns,
   type HttpMethod,
-} from './types';
+} from '../shared/types';
 import micromatch from 'micromatch';
 import { OpenAPIV3 } from 'openapi-types';
 import { HTTP_METHODS } from '../shared/constants';

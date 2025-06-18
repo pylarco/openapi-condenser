@@ -1,7 +1,7 @@
 import { formatAsJson } from './json';
 import { formatAsXml } from './xml';
 import { formatAsConciseText } from './concise-text';
-import type { OutputFormat } from '../types';
+import type { OutputFormat } from '../../shared/types';
 import { OpenAPIV3 } from 'openapi-types';
 import YAML from 'yaml';
 

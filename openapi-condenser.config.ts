@@ -1,4 +1,4 @@
-import type { ExtractorConfig } from './src/backend/types';
+import type { ExtractorConfig } from './src/shared/types';
 
 const config: ExtractorConfig = {
   source: {
