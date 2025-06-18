@@ -26,7 +26,8 @@
     "index.html",
     "tsconfig.json",
     "package.json",
-    "vite.config.ts"
+    "vite.config.ts",
+    "test"
   ],
   "ignore": {
     "useGitignore": true,

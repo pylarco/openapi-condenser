@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import CodeMirror from '@uiw/react-codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
-import type { OutputFormat } from '../../../../shared/types';
 import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
 import { languageMap } from '../../../constants';
 

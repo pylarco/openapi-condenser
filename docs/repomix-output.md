@@ -35,6 +35,11 @@ src/frontend/state/motion.reuse.tsx
 src/frontend/styles.css
 src/shared/constants.ts
 src/shared/types.ts
+test/e2e/server.test.ts
+test/e2e/transformer.test.ts
+test/test.util.ts
+test/unit/extractor.test.ts
+test/unit/transformer.test.ts
 tsconfig.json
 vite.config.ts
 ```
@@ -113,109 +118,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 ```
 
-## File: src/frontend/state/motion.reuse.tsx
-```typescript
-import { useLayoutEffect, useRef } from 'react'
-import gsap from 'gsap'
-
-export const usePanelEntrance = (el: React.RefObject<HTMLElement>) => {
-  useLayoutEffect(() => {
-    if (!el.current) return
-
-    gsap.from(el.current, {
-      opacity: 0,
-      y: 50,
-      duration: 0.5,
-      ease: 'power3.out',
-    })
-  }, [el])
-}
-
-export const useButtonHover = (el: React.RefObject<HTMLElement>) => {
-  useLayoutEffect(() => {
-    if (!el.current) return;
-    const tl = gsap.timeline({ paused: true });
-    tl.to(el.current, { scale: 1.05, duration: 0.2, ease: 'power2.out' });
-
-    const onEnter = () => tl.play();
-    const onLeave = () => tl.reverse();
-
-    el.current.addEventListener('mouseenter', onEnter);
-    el.current.addEventListener('mouseleave', onLeave);
-
-    return () => {
-      el.current?.removeEventListener('mouseenter', onEnter);
-      el.current?.removeEventListener('mouseleave', onLeave);
-    }
-  }, [el]);
-}
-
-export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
-  useLayoutEffect(() => {
-    if (!el.current) return;
-
-    const input = el.current.querySelector('input, textarea');
-    if (!input) return;
-
-    const tl = gsap.timeline({ paused: true });
-    tl.to(el.current, {
-      boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.5)',
-      borderColor: 'rgb(34 211 238)',
-      duration: 0.2,
-      ease: 'power2.out'
-    });
-
-    const onFocus = () => tl.play();
-    const onBlur = () => tl.reverse();
-
-    input.addEventListener('focus', onFocus);
-    input.addEventListener('blur', onBlur);
-
-    return () => {
-      input.removeEventListener('focus', onFocus);
-      input.removeEventListener('blur', onBlur);
-    }
-  }, [el]);
-}
-
-export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
-  const tl = useRef<gsap.core.Timeline>();
-  const isInitialMount = useRef(true);
-
-  // This effect runs once to create the timeline.
-  useLayoutEffect(() => {
-    if (!el.current) return;
-    const knob = el.current.nextElementSibling?.nextElementSibling;
-    const background = el.current.nextElementSibling;
-    if (!knob || !background) return;
-
-    tl.current = gsap.timeline({ paused: true })
-      .to(background, { backgroundColor: 'rgb(6 182 212)', duration: 0.2, ease: 'power2.inOut' })
-      .to(knob, { x: 16, duration: 0.2, ease: 'power2.inOut' }, '<');
-      
-    return () => { tl.current?.kill() };
-  }, [el]);
-
-  // This effect controls the animation based on the `checked` state.
-  useLayoutEffect(() => {
-    if (tl.current) {
-      if (isInitialMount.current) {
-        // On first render, just set the state, don't animate
-        tl.current.progress(checked ? 1 : 0);
-        isInitialMount.current = false;
-      } else {
-        // On subsequent renders, animate
-        if (checked) {
-          tl.current.play();
-        } else {
-          tl.current.reverse();
-        }
-      }
-    }
-  }, [checked]);
-}
-```
-
 ## File: src/shared/types.ts
 ```typescript
 export type HttpMethod = 'get' | 'put' | 'post' | 'delete' | 'options' | 'head' | 'patch' | 'trace';
@@ -256,6 +158,124 @@ export interface SpecStats {
 }
 ```
 
+## File: test/test.util.ts
+```typescript
+export const sampleSpec = {
+    openapi: '3.0.0',
+    info: {
+      title: 'Sample API',
+      version: '1.0.0',
+      description: 'A sample API for testing.',
+    },
+    servers: [
+      {
+        url: 'https://api.example.com/v1',
+        description: 'Production server',
+      },
+    ],
+    tags: [
+      { name: 'users', description: 'User operations' },
+      { name: 'items', description: 'Item operations' },
+      { name: 'internal', description: 'Internal stuff' },
+    ],
+    paths: {
+      '/users': {
+        get: {
+          summary: 'Get all users',
+          tags: ['users'],
+          description: 'Returns a list of all users.',
+          responses: {
+            '200': {
+              description: 'A list of users.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: { $ref: '#/components/schemas/User' },
+                  },
+                  example: [{ id: '1', name: 'John Doe' }],
+                },
+              },
+            },
+          },
+        },
+      },
+      '/users/{userId}': {
+        get: {
+          summary: 'Get a user by ID',
+          tags: ['users'],
+          description: 'Returns a single user.',
+          parameters: [
+            { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': {
+              description: 'A single user.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/User' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/items': {
+        post: {
+          summary: 'Create an item',
+          tags: ['items'],
+          description: 'Creates a new item.',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Item' },
+              },
+            },
+          },
+          responses: {
+            '201': { description: 'Item created' },
+          },
+        },
+      },
+      '/internal/status': {
+        get: {
+          summary: 'Get internal status',
+          tags: ['internal'],
+          deprecated: true,
+          description: 'This is a deprecated endpoint.',
+          responses: {
+            '200': { description: 'OK' },
+          },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'User ID', example: 'user-123' },
+            name: { type: 'string', description: 'User name', example: 'Jane Doe' },
+          },
+        },
+        Item: {
+          type: 'object',
+          properties: {
+            sku: { type: 'string' },
+            price: { type: 'number' },
+          },
+        },
+        UnusedSchema: {
+          type: 'object',
+          properties: {
+            foo: { type: 'string' },
+          },
+        },
+      },
+    },
+  };
+```
+
 ## File: src/backend/constants.ts
 ```typescript
 export const contentTypeMappings: ReadonlyArray<[string, string]> = [
@@ -269,6 +289,436 @@ export const contentTypeMappings: ReadonlyArray<[string, string]> = [
 export const DEFAULT_CONFIG_PATH = './openapi-condenser.config.ts';
 export const TOKEN_CHAR_RATIO = 4;
 export const USER_AGENT = 'OpenAPI-Condenser/1.0';
+```
+
+## File: src/backend/formatters/json.ts
+```typescript
+import { OpenAPIV3 } from 'openapi-types';
+
+/**
+ * Format data as JSON
+ */
+export const formatAsJson = (data: OpenAPIV3.Document): string => {
+  return JSON.stringify(data, null, 2);
+};
+```
+
+## File: src/backend/formatters/xml.ts
+```typescript
+import { XMLBuilder } from 'fast-xml-parser';
+import { OpenAPIV3 } from 'openapi-types';
+
+/**
+ * Format data as XML
+ */
+export const formatAsXml = (data: OpenAPIV3.Document): string => {
+  const builder = new XMLBuilder({
+    format: true,
+    indentBy: '  ',
+    ignoreAttributes: false
+  });
+  
+  return builder.build({ openapi: data });
+};
+```
+
+## File: src/frontend/components/features/index.ts
+```typescript
+export * from './ActionPanel';
+export * from './config/ConfigPanel';
+export * from './input/InputPanel';
+export * from './output/OutputPanel';
+export * from './stats/StatsPanel';
+```
+
+## File: src/frontend/components/ui/index.ts
+```typescript
+export * from './Tooltip';
+export * from './Section';
+export * from './Switch';
+export * from './TextInput';
+```
+
+## File: test/e2e/transformer.test.ts
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { extractOpenAPI } from '../../src/backend/extractor';
+import type { ExtractorConfig, OpenAPIExtractorResult } from '../../src/backend/types';
+
+const complexTestSpec = {
+  openapi: '3.0.0',
+  info: {
+    title: 'Complex Test API',
+    version: '1.0.0',
+  },
+  paths: {
+    '/users/{id}': {
+      get: {
+        summary: 'Get a user',
+        tags: ['Users'],
+        operationId: 'getUser',
+        parameters: [
+          { $ref: '#/components/parameters/UserId' }
+        ],
+        responses: {
+          '200': {
+            description: 'A user object',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/User' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/posts/{id}': {
+      get: {
+        summary: 'Get a post',
+        tags: ['Posts'],
+        operationId: 'getPost',
+        responses: {
+          '200': {
+            description: 'A post object',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Post' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/tags': {
+        post: {
+            summary: 'Create a tag',
+            tags: ['Tags'],
+            operationId: 'createTag',
+            requestBody: {
+                $ref: '#/components/requestBodies/TagBody'
+            },
+            responses: {
+                '201': {
+                    description: 'Tag created'
+                }
+            }
+        }
+    }
+  },
+  components: {
+    parameters: {
+        UserId: {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' }
+        }
+    },
+    requestBodies: {
+        TagBody: {
+            content: {
+                'application/json': {
+                    schema: { $ref: '#/components/schemas/Tag' }
+                }
+            }
+        }
+    },
+    schemas: {
+      User: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          profile: { $ref: '#/components/schemas/UserProfile' },
+        },
+      },
+      UserProfile: {
+        type: 'object',
+        properties: {
+          email: { type: 'string' },
+          avatar: { $ref: '#/components/schemas/Avatar' }
+        },
+      },
+      Avatar: {
+        type: 'object',
+        properties: {
+          url: { type: 'string' },
+        }
+      },
+      Post: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          author: { $ref: '#/components/schemas/User' },
+        },
+      },
+      Tag: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' }
+        }
+      }
+    },
+  },
+};
+
+describe('Complex Transformer and Stats Validation', () => {
+  it('should correctly filter paths, remove unused components transitively, and calculate accurate stats', async () => {
+    const config: ExtractorConfig = {
+      source: {
+        type: 'memory',
+        path: 'spec.json',
+        content: JSON.stringify(complexTestSpec),
+      },
+      filter: {
+        paths: {
+          exclude: ['/posts/{id}'],
+        },
+      },
+      transform: {},
+      output: {
+        format: 'json',
+      },
+    };
+
+    const result: OpenAPIExtractorResult = await extractOpenAPI(config);
+
+    expect(result.success).toBe(true);
+    if (!result.success || !result.stats) return;
+
+    const transformedSpec = JSON.parse(result.data as string);
+    
+    // 1. Validate Stats
+    expect(result.stats.before.operations).toBe(3);
+    expect(result.stats.before.schemas).toBe(5);
+    expect(result.stats.after.operations).toBe(2); // get user, create tag
+    expect(result.stats.after.schemas).toBe(4);   // User, UserProfile, Avatar, Tag (Post should be removed)
+    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
+    expect(result.stats.after.tokenCount).toBeLessThan(result.stats.before.tokenCount);
+
+    // 2. Validate Path Filtering
+    expect(transformedSpec.paths['/users/{id}']).toBeDefined();
+    expect(transformedSpec.paths['/posts/{id}']).toBeUndefined();
+    expect(transformedSpec.paths['/tags']).toBeDefined();
+
+    // 3. Validate Component Removal
+    const components = transformedSpec.components;
+    // Kept because /users/{id} is kept
+    expect(components.schemas.User).toBeDefined();
+    // Kept because User needs it (transitive)
+    expect(components.schemas.UserProfile).toBeDefined();
+    // Kept because UserProfile needs it (transitive)
+    expect(components.schemas.Avatar).toBeDefined();
+    // Kept because /tags is kept
+    expect(components.schemas.Tag).toBeDefined();
+     // Kept because /users/{id} needs it
+    expect(components.parameters.UserId).toBeDefined();
+    // Kept because /tags needs it
+    expect(components.requestBodies.TagBody).toBeDefined();
+
+    // Removed because /posts/{id} was removed and nothing else uses it
+    expect(components.schemas.Post).toBeUndefined();
+  });
+
+  it('should handle a combination of path, tag, and method filters plus transformations', async () => {
+    const multiFilterSpec = {
+      openapi: '3.0.0',
+      info: { title: 'Multi-filter Test', version: '1.0' },
+      paths: {
+        '/products': {
+          get: { 
+            tags: ['products', 'search'],
+            summary: 'Get all products',
+            description: 'This should be removed.',
+            responses: { '200': { description: 'OK' } }
+          },
+          post: {
+            tags: ['products'],
+            summary: 'Create a product',
+            responses: { '201': { description: 'Created' } }
+          }
+        },
+        '/inventory': {
+          get: {
+            tags: ['inventory'],
+            summary: 'Get inventory',
+            responses: { '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/Inventory' }, example: { 'stock': 100 } } } } }
+          }
+        },
+        '/users': {
+          get: {
+            tags: ['users'],
+            summary: 'Get users',
+            responses: { '200': { description: 'OK' } }
+          }
+        }
+      },
+      components: {
+        schemas: {
+          Inventory: { type: 'object', properties: { stock: { type: 'integer' } } }
+        }
+      }
+    };
+
+    const config: ExtractorConfig = {
+      source: {
+        type: 'memory',
+        path: 'spec.json',
+        content: JSON.stringify(multiFilterSpec)
+      },
+      filter: {
+        paths: { exclude: ['/users'] }, // Exclude /users
+        tags: { include: ['products', 'inventory'] }, // Only include endpoints with these tags
+        methods: ['get'] // Only allow GET methods
+      },
+      transform: {
+        removeDescriptions: true,
+        removeExamples: true
+      },
+      output: { format: 'json' }
+    };
+
+    const result = await extractOpenAPI(config);
+    expect(result.success).toBe(true);
+    if(!result.success || !result.stats) return;
+
+    const spec = JSON.parse(result.data as string);
+
+    // 1. Path and method assertions
+    expect(spec.paths['/products']).toBeDefined();
+    expect(spec.paths['/products'].get).toBeDefined(); // Kept: matches tags and method
+    expect(spec.paths['/products'].post).toBeUndefined(); // Removed: method is not 'get'
+    
+    expect(spec.paths['/inventory']).toBeDefined();
+    expect(spec.paths['/inventory'].get).toBeDefined(); // Kept: matches tags and method
+    
+    expect(spec.paths['/users']).toBeUndefined(); // Removed: excluded by path filter
+
+    // 2. Transformation assertions
+    expect(spec.paths['/products'].get.description).toBeUndefined();
+    expect(spec.paths['/inventory'].get.responses['200'].content['application/json'].example).toBeUndefined();
+
+    // 3. Component assertions
+    expect(spec.components.schemas.Inventory).toBeDefined(); // Kept because /inventory is kept
+
+    // 4. Stats assertions
+    expect(result.stats.before.operations).toBe(4);
+    expect(result.stats.after.operations).toBe(2); // /products -> get, /inventory -> get
+    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
+  });
+});
+```
+
+## File: test/unit/transformer.test.ts
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { getComponentNameFromRef, removeUnusedComponents, findRefsRecursive } from '../../src/backend/transformer';
+import { OpenAPIV3 } from 'openapi-types';
+
+describe('transformer.ts unit tests', () => {
+    describe('getComponentNameFromRef', () => {
+        it('should correctly parse a standard component ref', () => {
+            const result = getComponentNameFromRef('#/components/schemas/MySchema');
+            expect(result).toEqual({ type: 'schemas', name: 'MySchema' });
+        });
+
+        it('should correctly parse a ref with a multi-part name', () => {
+            const result = getComponentNameFromRef('#/components/schemas/Common/ErrorResponse');
+            expect(result).toEqual({ type: 'schemas', name: 'Common/ErrorResponse' });
+        });
+
+        it('should return null for refs not pointing to components', () => {
+            const result = getComponentNameFromRef('#/paths/~1users/get');
+            expect(result).toBeNull();
+        });
+
+        it('should return null for malformed component refs', () => {
+            expect(getComponentNameFromRef('#/components/schemas/')).toBeNull();
+            expect(getComponentNameFromRef('#/components/')).toBeNull();
+            expect(getComponentNameFromRef('invalid-ref')).toBeNull();
+        });
+    });
+
+    describe('findRefsRecursive', () => {
+        it('should find all refs in a complex object', () => {
+            const obj = {
+                a: { $ref: '#/components/schemas/A' },
+                b: [{ $ref: '#/components/schemas/B' }],
+                c: { nested: { $ref: '#/components/schemas/C' } },
+                d: 'not a ref',
+                e: { $ref: 123 } // invalid ref type
+            };
+            const refs = new Set<string>();
+            findRefsRecursive(obj, refs);
+            expect(refs).toEqual(new Set(['#/components/schemas/A', '#/components/schemas/B', '#/components/schemas/C']));
+        });
+    });
+
+    describe('removeUnusedComponents', () => {
+        const baseSpec = (): OpenAPIV3.Document => ({
+            openapi: '3.0.0',
+            info: { title: 'Test Spec', version: '1.0.0' },
+            paths: {
+                '/users': {
+                    get: {
+                        responses: { '200': { description: 'ok', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
+                    }
+                }
+            },
+            components: {
+                schemas: {
+                    User: { type: 'object', properties: { profile: { $ref: '#/components/schemas/Profile' } } },
+                    Profile: { type: 'object', properties: { avatar: { $ref: '#/components/schemas/Avatar' } } },
+                    Avatar: { type: 'object' },
+                    UnusedSchema: { type: 'object' },
+                    OrphanedDependency: { $ref: '#/components/schemas/UnusedSchema' }
+                },
+                parameters: {
+                    UnusedParam: { name: 'limit', in: 'query' }
+                }
+            }
+        });
+        
+        it('should remove all unused components, including transitive ones', () => {
+            const spec = baseSpec();
+            const result = removeUnusedComponents(spec);
+
+            // Kept schemas
+            expect(result.components?.schemas?.User).toBeDefined();
+            expect(result.components?.schemas?.Profile).toBeDefined();
+            expect(result.components?.schemas?.Avatar).toBeDefined();
+
+            // Removed schemas
+            expect(result.components?.schemas?.UnusedSchema).toBeUndefined();
+            expect(result.components?.schemas?.OrphanedDependency).toBeUndefined();
+
+            // Removed component groups
+            expect(result.components?.parameters).toBeUndefined();
+        });
+
+        it('should remove the entire components object if nothing is left', () => {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
+                paths: { '/health': { get: { responses: { '200': { description: 'OK' } } } } },
+                components: { schemas: { Unused: { type: 'object' } } }
+            };
+            const result = removeUnusedComponents(spec);
+            expect(result.components).toBeUndefined();
+        });
+
+        it('should not modify a spec with no components object', () => {
+            const spec: OpenAPIV3.Document = { 
+                openapi: '3.0.0',
+                info: { title: 'Test Spec', version: '1.0.0' },
+                paths: {} 
+            };
+            const result = removeUnusedComponents(JSON.parse(JSON.stringify(spec)));
+            expect(result).toEqual(spec);
+        });
+    });
+});
 ```
 
 ## File: src/backend/formatters/concise-text.ts
@@ -453,9 +903,21 @@ const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV
  * Format data as a concise text format for LLMs.
  */
 export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
+  const parts: string[] = [];
+
+  // Info Block
+  if (data.info) {
+    let infoBlock = `# ${data.info.title}`;
+    if (data.info.version) {
+        infoBlock += ` (v${data.info.version})`;
+    }
+    if (data.info.description) {
+        infoBlock += `\n\n${data.info.description.trim()}`;
+    }
+    parts.push(infoBlock);
+  }
+
   const endpoints: string[] = [];
-  const schemas: string[] = [];
-  
   // Endpoints
   if (data.paths) {
     for (const [path, pathItem] of Object.entries(data.paths)) {
@@ -473,7 +935,12 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
       }
     }
   }
+  
+  if (endpoints.length > 0) {
+      parts.push(endpoints.join('\n'));
+  }
 
+  const schemas: string[] = [];
   // Schemas
   if (data.components?.schemas) {
     for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
@@ -481,57 +948,759 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
     }
   }
 
-  let output = endpoints.join('\n');
-  
   if (schemas.length > 0) {
-      if (output.length > 0) {
-        output += '\n---\n\n';
-      }
-      output += schemas.join('\n');
+      parts.push(schemas.join('\n'));
   }
   
-  return output.trim();
+  return parts.join('\n\n---\n\n').trim();
 };
 ```
 
-## File: src/backend/formatters/json.ts
+## File: src/frontend/components/features/ActionPanel.tsx
 ```typescript
+import React, { useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { isLoadingAtom, condenseSpecAtom, specContentAtom, outputAtom } from '../../state/atoms';
+import { useButtonHover } from '../../state/motion.reuse';
+
+export const ActionPanel: React.FC = () => {
+    const isLoading = useAtomValue(isLoadingAtom);
+    const specContent = useAtomValue(specContentAtom);
+    const output = useAtomValue(outputAtom);
+    const onCondense = useSetAtom(condenseSpecAtom);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    useButtonHover(buttonRef);
+
+    return (
+        <button 
+            ref={buttonRef}
+            onClick={() => onCondense()}
+            disabled={isLoading || !specContent}
+            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
+        >
+            {isLoading ? (
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            ) : output ? 'Re-condense' : 'Condense'}
+        </button>
+    );
+}
+```
+
+## File: src/frontend/components/ui/Switch.tsx
+```typescript
+import React, { useRef } from 'react';
+import { Tooltip } from './Tooltip';
+import { useSwitchAnimation } from '../../state/motion.reuse';
+
+export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    useSwitchAnimation(inputRef, checked);
+
+    return (
+        <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-sm text-slate-300 flex items-center gap-2">
+                {label}
+                {tooltip && (
+                    <Tooltip text={tooltip}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </Tooltip>
+                )}
+            </span>
+            <div className="relative">
+                <input ref={inputRef} type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+                <div className="block w-10 h-6 rounded-full bg-slate-600"></div>
+                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full"></div>
+            </div>
+        </label>
+    )
+});
+```
+
+## File: src/frontend/components/ui/TextInput.tsx
+```typescript
+import React, { useRef } from 'react';
+import { Tooltip } from './Tooltip';
+import { useInputFocus } from '../../state/motion.reuse';
+
+export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => {
+    const inputRef = useRef<HTMLDivElement>(null);
+    useInputFocus(inputRef);
+
+    return (
+        <div ref={inputRef}>
+            <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
+                {label}
+                {tooltip && (
+                    <Tooltip text={tooltip}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </Tooltip>
+                )}
+            </label>
+            <input
+                type="text"
+                placeholder={placeholder}
+                value={value?.join(', ')}
+                onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
+                className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition"
+            />
+        </div>
+    )
+});
+```
+
+## File: src/frontend/constants.ts
+```typescript
+import { json } from '@codemirror/lang-json';
+import { yaml } from '@codemirror/lang-yaml';
+import { markdown } from '@codemirror/lang-markdown';
+import type { OutputFormat } from '../shared/types';
+
+// --- App Info ---
+export const APP_TITLE = 'OpenAPI Condenser';
+export const APP_SUBTITLE = 'Pack your OpenAPI into AI-friendly formats';
+export const NAV_LINKS = {
+    SDK: '/sdk',
+    API: '/swagger',
+    GITHUB: 'https://github.com/repomix/openapi-condenser',
+    SPONSOR: 'https://github.com/sponsors/repomix',
+};
+
+// --- Input Panel ---
+export const INPUT_DEBOUNCE_DELAY = 300; // ms
+export const URL_FETCH_DEBOUNCE_DELAY = 500; // ms
+export const DEFAULT_SPEC_FILENAME = 'spec.json';
+export const DEFAULT_URL_FILENAME = 'spec.from.url';
+
+
+// --- Output Panel ---
+export const languageMap: { [K in OutputFormat]: () => any } = {
+  json: () => json(),
+  yaml: () => yaml(),
+  xml: () => markdown({}), // fallback for xml
+  markdown: () => markdown({}),
+};
+```
+
+## File: src/frontend/styles.css
+```css
+/* You can add any additional global styles here if needed */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global performance optimizations */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Use GPU acceleration for certain animations */
+.transform,
+.transition-transform,
+.transition,
+.transition-all,
+.transition-opacity {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Optimize for scrolling performance */
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Optimize tooltips */
+[class*="z-"] {
+  transform: translateZ(0);
+}
+```
+
+## File: src/shared/constants.ts
+```typescript
+import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
+
+// --- App Config ---
+export const API_PORT = 3000;
+export const API_HOST = 'localhost';
+export const API_PREFIX = '/api';
+export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
+
+// --- OpenAPI Semantics ---
+export const HTTP_METHODS: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
+
+// --- Default Extractor Config ---
+export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
+  filter: {
+    paths: { include: [], exclude: [] },
+    tags: { include: [], exclude: [] },
+    methods: [],
+    includeDeprecated: false,
+  },
+  transform: {
+    removeExamples: false,
+    removeDescriptions: false,
+    removeSummaries: false,
+    includeServers: true,
+    includeInfo: true,
+    includeSchemas: true,
+    includeRequestBodies: true,
+    includeResponses: true,
+  },
+};
+```
+
+## File: src/backend/cli.ts
+```typescript
+#!/usr/bin/env bun
+import { parse } from 'cmd-ts';
+import { command, option, string, optional, flag } from 'cmd-ts';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
+import type { ExtractorConfig, OutputFormat } from './types';
+import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH } from './constants';
+
+// Define CLI command
+const cmd = command({
+  name: 'openapi-condenser',
+  description: 'Extract and transform OpenAPI specifications',
+  args: {
+    config: option({
+      type: optional(string),
+      long: 'config',
+      short: 'c',
+      description: 'Path to configuration file',
+    }),
+    source: option({
+      type: optional(string),
+      long: 'source',
+      short: 's',
+      description: 'Source file path or URL',
+    }),
+    sourceType: option({
+      type: optional(string),
+      long: 'source-type',
+      description: 'Source type (local or remote)',
+    }),
+    format: option({
+      type: optional(string),
+      long: 'format',
+      short: 'f',
+      description: `Output format (${OUTPUT_FORMATS.join(', ')})`,
+    }),
+    outputPath: option({
+      type: optional(string),
+      long: 'output',
+      short: 'o',
+      description: 'Output file path',
+    }),
+    includePaths: option({
+      type: optional(string),
+      long: 'include-paths',
+      description: 'Include paths by glob patterns (comma-separated)',
+    }),
+    excludePaths: option({
+      type: optional(string),
+      long: 'exclude-paths',
+      description: 'Exclude paths by glob patterns (comma-separated)',
+    }),
+    includeTags: option({
+      type: optional(string),
+      long: 'include-tags',
+      description: 'Include endpoints by tag glob patterns (comma-separated)',
+    }),
+    excludeTags: option({
+      type: optional(string),
+      long: 'exclude-tags',
+      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
+    }),
+    methods: option({
+      type: optional(string),
+      long: 'methods',
+      description: 'Filter by HTTP methods (comma-separated)',
+    }),
+    includeDeprecated: flag({
+      long: 'include-deprecated',
+      description: 'Include deprecated endpoints',
+    }),
+    excludeSchemas: flag({
+      long: 'exclude-schemas',
+      description: 'Exclude component schemas from the output',
+    }),
+    excludeRequestBodies: flag({
+      long: 'exclude-request-bodies',
+      description: 'Exclude request bodies from the output',
+    }),
+    excludeResponses: flag({
+      long: 'exclude-responses',
+      description: 'Exclude responses from the output',
+    }),
+    verbose: flag({
+      long: 'verbose',
+      short: 'v',
+      description: 'Show verbose output',
+    }),
+  },
+  handler: async (args) => {
+    try {
+      // Load configuration
+      const configPath = args.config || DEFAULT_CONFIG_PATH;
+      let config: ExtractorConfig;
+      
+      try {
+        config = await loadConfig(configPath);
+      } catch (error) {
+        if (args.source) {
+          const format = args.format || DEFAULT_OUTPUT_FORMAT;
+          if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
+            console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
+            process.exit(1);
+          }
+          // Create minimal config if no config file but source is provided
+          config = {
+            source: {
+              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
+              path: args.source
+            },
+            output: {
+              format: format as OutputFormat,
+            },
+          };
+        } else {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
+      }
+      
+      // Merge command line args with config
+      const mergedConfig = mergeWithCommandLineArgs(config, args);
+      
+      if (args.verbose) {
+        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
+      }
+      
+      // Run extraction
+      const result = await extractOpenAPI(mergedConfig);
+      
+      if (!result.success) {
+        if (result.errors) {
+          console.error('Errors:', result.errors.join('\n'));
+        }
+        process.exit(1);
+      }
+      
+      if (!mergedConfig.output.destination) {
+        // Output to stdout if no destination specified
+        console.log(result.data);
+      } else if (args.verbose) {
+        console.log(`Output written to: ${mergedConfig.output.destination}`);
+      }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        console.warn('Warnings:', result.warnings.join('\n'));
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  },
+});
+
+// Run the command
+await parse(cmd, process.argv.slice(2));
+```
+
+## File: src/frontend/components/features/stats/StatsPanel.tsx
+```typescript
+import React from 'react';
+import { useAtomValue } from 'jotai';
+import { statsAtom } from '../../../state/atoms';
+
+const StatsHeader: React.FC = () => (
+  <div className="flex justify-between items-center text-xs text-slate-400 font-medium mb-2 px-2">
+    <span>Metric</span>
+    <div className="flex items-center gap-4 w-[320px] justify-end">
+      <span className="w-16 text-right">Before</span>
+      <span className="w-16 text-right">After</span>
+      <span className="w-32 text-right">Change / Reduction</span>
+    </div>
+  </div>
+);
+
+const StatItem: React.FC<{ label: string; before: number; after: number }> = ({ label, before, after }) => {
+  const reduction = before > 0 ? ((before - after) / before) * 100 : 0;
+  const reductionColor = reduction > 0 ? 'text-green-400' : reduction < 0 ? 'text-red-400' : 'text-slate-400';
+  const change = after - before;
+  const formatNumber = (num: number) => num.toLocaleString('en-US');
+
+  return (
+    <div className="flex justify-between items-center py-2">
+      <span className="text-slate-300">{label}</span>
+      <div className="flex items-center gap-4">
+        <span className="text-slate-400 tabular-nums w-16 text-right">{formatNumber(before)}</span>
+        <span className="text-xl font-bold text-white tabular-nums w-16 text-right">{formatNumber(after)}</span>
+        <span className={`text-sm font-medium w-32 text-right tabular-nums ${reductionColor}`}>
+          {change !== 0 ? `${change > 0 ? '+' : ''}${formatNumber(change)}` : ''} ({reduction.toFixed(0)}%)
+        </span>
+      </div>
+    </div>
+  );
+};
+
+
+export const StatsPanel: React.FC = () => {
+  const stats = useAtomValue(statsAtom);
+
+  if (!stats) return null;
+
+  const specStats = [
+    { label: 'Paths', before: stats.before.paths, after: stats.after.paths },
+    { label: 'Operations', before: stats.before.operations, after: stats.after.operations },
+    { label: 'Schemas', before: stats.before.schemas, after: stats.after.schemas },
+  ];
+
+  const contentStats = [
+    { label: 'Characters', before: stats.before.charCount, after: stats.after.charCount },
+    { label: 'Lines', before: stats.before.lineCount, after: stats.after.lineCount },
+    { label: 'Tokens (est.)', before: stats.before.tokenCount, after: stats.after.tokenCount },
+  ];
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
+      <h3 className="text-lg font-semibold text-white mb-4">Condensation Stats</h3>
+      <StatsHeader />
+      <div className="divide-y divide-slate-700/50">
+        {specStats.map(stat => <StatItem key={stat.label} {...stat} />)}
+      </div>
+      <div className="my-2 border-t border-slate-700/50" />
+      <div className="divide-y divide-slate-700/50">
+        {contentStats.map(stat => <StatItem key={stat.label} {...stat} />)}
+      </div>
+    </div>
+  );
+};
+```
+
+## File: src/frontend/state/motion.reuse.tsx
+```typescript
+import { useLayoutEffect, useRef } from 'react'
+import gsap from 'gsap'
+
+export const usePanelEntrance = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return
+
+    gsap.from(el.current, {
+      opacity: 0,
+      y: 50,
+      duration: 0.5,
+      ease: 'power3.out',
+    })
+  }, [el])
+}
+
+export const useButtonHover = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, { scale: 1.05, duration: 0.2, ease: 'power2.out' });
+
+    const onEnter = () => tl.play();
+    const onLeave = () => tl.reverse();
+
+    el.current.addEventListener('mouseenter', onEnter);
+    el.current.addEventListener('mouseleave', onLeave);
+
+    return () => {
+      el.current?.removeEventListener('mouseenter', onEnter);
+      el.current?.removeEventListener('mouseleave', onLeave);
+    }
+  }, [el]);
+}
+
+export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
+  useLayoutEffect(() => {
+    if (!el.current) return;
+
+    const input = el.current.querySelector('input, textarea');
+    if (!input) return;
+
+    const tl = gsap.timeline({ paused: true });
+    tl.to(el.current, {
+      boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.5)',
+      borderColor: 'rgb(34 211 238)',
+      duration: 0.2,
+      ease: 'power2.out'
+    });
+
+    const onFocus = () => tl.play();
+    const onBlur = () => tl.reverse();
+
+    input.addEventListener('focus', onFocus);
+    input.addEventListener('blur', onBlur);
+
+    return () => {
+      input.removeEventListener('focus', onFocus);
+      input.removeEventListener('blur', onBlur);
+    }
+  }, [el]);
+}
+
+export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
+  const tl = useRef<gsap.core.Timeline>();
+  const isInitialMount = useRef(true);
+
+  // This effect runs once to create the timeline.
+  useLayoutEffect(() => {
+    if (!el.current) return;
+    const knob = el.current.nextElementSibling?.nextElementSibling;
+    const background = el.current.nextElementSibling;
+    if (!knob || !background) return;
+
+    tl.current = gsap.timeline({ paused: true })
+      .to(background, { backgroundColor: 'rgb(6 182 212)', duration: 0.2, ease: 'power2.inOut' })
+      .to(knob, { x: 16, duration: 0.2, ease: 'power2.inOut' }, '<');
+      
+    return () => { tl.current?.kill() };
+  }, [el]);
+
+  // This effect controls the animation based on the `checked` state.
+  useLayoutEffect(() => {
+    if (tl.current) {
+      if (isInitialMount.current) {
+        // On first render, just set the state, don't animate
+        tl.current.progress(checked ? 1 : 0);
+        isInitialMount.current = false;
+      } else {
+        // On subsequent renders, animate
+        if (checked) {
+          tl.current.play();
+        } else {
+          tl.current.reverse();
+        }
+      }
+    }
+  }, [checked]);
+}
+```
+
+## File: test/unit/extractor.test.ts
+```typescript
+import { describe, it, expect } from 'bun:test';
+import { calculateSpecStats } from '../../src/backend/extractor';
 import { OpenAPIV3 } from 'openapi-types';
 
-/**
- * Format data as JSON
- */
-export const formatAsJson = (data: OpenAPIV3.Document): string => {
-  return JSON.stringify(data, null, 2);
-};
+describe('extractor.ts unit tests', () => {
+    describe('calculateSpecStats', () => {
+        it('should return zero for an empty or invalid spec', () => {
+            const spec = null;
+            expect(calculateSpecStats(spec as unknown as OpenAPIV3.Document)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
+            const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
+            expect(emptyStats.paths).toBe(0);
+            expect(emptyStats.operations).toBe(0);
+            expect(emptyStats.schemas).toBe(0);
+            expect(emptyStats.charCount).toBe(2); // {}
+        });
+
+        it('should correctly count paths, operations, and schemas', () => {
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
+                paths: {
+                    '/users': {
+                        get: { summary: 'Get users', responses: { '200': { description: 'OK' } } },
+                        post: { summary: 'Create user', responses: { '200': { description: 'OK' } } }
+                    },
+                    '/users/{id}': {
+                        get: { summary: 'Get user by id', responses: { '200': { description: 'OK' } } },
+                        put: { summary: 'Update user', responses: { '200': { description: 'OK' } } },
+                        delete: { summary: 'Delete user', responses: { '200': { description: 'OK' } } },
+                        // This should not be counted as an operation
+                        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
+                    },
+                    '/health': {
+                        get: { summary: 'Health check', responses: { '200': { description: 'OK' } } }
+                    }
+                },
+                components: {
+                    schemas: {
+                        User: { type: 'object' },
+                        Error: { type: 'object' }
+                    }
+                }
+            };
+            const stats = calculateSpecStats(spec);
+            expect(stats.paths).toBe(3);
+            expect(stats.operations).toBe(6);
+            expect(stats.schemas).toBe(2);
+            expect(stats.charCount).toBeGreaterThan(100);
+            expect(stats.lineCount).toBeGreaterThan(10);
+            expect(stats.tokenCount).toBeGreaterThan(25);
+        });
+
+        it('should handle paths with no valid methods', () => {
+            const usersPath: OpenAPIV3.PathItemObject = {
+                parameters: [],
+            };
+            Object.assign(usersPath, { 'x-custom-property': 'value' });
+
+            const spec: OpenAPIV3.Document = {
+                openapi: '3.0.0',
+                info: { title: 'test', version: '1.0'},
+                paths: {
+                    '/users': usersPath
+                },
+                components: {}
+            };
+            const stats = calculateSpecStats(spec);
+            expect(stats.paths).toBe(1);
+            expect(stats.operations).toBe(0);
+            expect(stats.schemas).toBe(0);
+        });
+    });
+});
 ```
 
-## File: src/backend/formatters/xml.ts
+## File: vite.config.ts
 ```typescript
-import { XMLBuilder } from 'fast-xml-parser';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      [API_PREFIX]: API_BASE_URL
+    }
+  }
+})
+```
+
+## File: src/backend/formatters/index.ts
+```typescript
+import { formatAsJson } from './json';
+import { formatAsXml } from './xml';
+import { formatAsConciseText } from './concise-text';
+import type { OutputFormat } from '../types';
 import { OpenAPIV3 } from 'openapi-types';
+import YAML from 'yaml';
 
-/**
- * Format data as XML
- */
-export const formatAsXml = (data: OpenAPIV3.Document): string => {
-  const builder = new XMLBuilder({
-    format: true,
-    indentBy: '  ',
-    ignoreAttributes: false
-  });
-  
-  return builder.build({ openapi: data });
+export interface Formatter {
+  format: (data: OpenAPIV3.Document) => string;
+}
+
+const formatAsYaml = (data: OpenAPIV3.Document): string => {
+  return YAML.stringify(data);
+};
+
+const formatters: Record<OutputFormat, Formatter> = {
+  json: { format: formatAsJson },
+  yaml: { format: formatAsYaml },
+  xml: { format: formatAsXml },
+  markdown: { format: formatAsConciseText },
+};
+
+export const getFormatter = (format: OutputFormat): Formatter => {
+  const formatter = formatters[format];
+  if (!formatter) {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+  return formatter;
 };
 ```
 
-## File: src/frontend/components/features/index.ts
+## File: src/backend/utils/fetcher.ts
 ```typescript
-export * from './ActionPanel';
-export * from './config/ConfigPanel';
-export * from './input/InputPanel';
-export * from './output/OutputPanel';
-export * from './stats/StatsPanel';
+import { promises as fs } from 'node:fs';
+import { extname } from 'node:path';
+import YAML from 'yaml';
+import type { OpenAPIExtractorResult, Source } from '../types';
+import { OpenAPI } from 'openapi-types';
+
+/**
+ * Fetch OpenAPI spec from local file, remote URL, or in-memory content
+ */
+export const fetchSpec = async (
+  source: Source
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    let content: string;
+    let contentType: string | null = null;
+    
+    if (source.type === 'memory') {
+      content = source.content;
+    } else if (source.type === 'local') {
+      content = await fs.readFile(source.path, 'utf-8');
+    } else {
+      const response = await fetch(source.path);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
+      }
+      content = await response.text();
+      contentType = response.headers.get('Content-Type');
+    }
+    
+    const data = parseContent(content, source.path, contentType);
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Parse content based on file extension or content type, with fallback.
+ */
+export const parseContent = (
+  content: string,
+  source: string,
+  contentType?: string | null,
+): OpenAPI.Document => {
+  try {
+    // 1. Try parsing based on content type for remote files
+    if (contentType) {
+      if (contentType.includes('json')) {
+        return JSON.parse(content) as OpenAPI.Document;
+      }
+      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
+        return YAML.parse(content) as OpenAPI.Document;
+      }
+    }
+
+    // 2. Try parsing based on file extension
+    const ext = extname(source).toLowerCase();
+    if (ext === '.json') {
+      return JSON.parse(content) as OpenAPI.Document;
+    }
+    if (ext === '.yaml' || ext === '.yml') {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+    
+    // 3. Fallback: try parsing as JSON, then YAML
+    try {
+      return JSON.parse(content) as OpenAPI.Document;
+    } catch (jsonError) {
+      return YAML.parse(content) as OpenAPI.Document;
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
+    );
+  }
+};
 ```
 
 ## File: src/frontend/components/features/input/InputPanel.tsx
@@ -746,698 +1915,104 @@ export const InputPanel: React.FC<InputPanelProps> = () => {
 };
 ```
 
-## File: src/frontend/components/features/stats/StatsPanel.tsx
+## File: src/frontend/state/atoms.ts
 ```typescript
-import React from 'react';
-import { useAtomValue } from 'jotai';
-import { statsAtom } from '../../../state/atoms';
+import { atom } from 'jotai';
+import { client } from '../client';
+import type { OutputFormat, SpecStats } from '../../shared/types';
+import { DEFAULT_SPEC_FILENAME } from '../constants';
+import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
 
-const StatsHeader: React.FC = () => (
-  <div className="flex justify-between items-center text-xs text-slate-400 font-medium mb-2 px-2">
-    <span>Metric</span>
-    <div className="flex items-center gap-4 w-[320px] justify-end">
-      <span className="w-16 text-right">Before</span>
-      <span className="w-16 text-right">After</span>
-      <span className="w-32 text-right">Change / Reduction</span>
-    </div>
-  </div>
-);
+// --- Base State Atoms ---
+export const specContentAtom = atom<string>('');
+export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
+export const configAtom = atom(defaultConfig);
+export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
 
-const StatItem: React.FC<{ label: string; before: number; after: number }> = ({ label, before, after }) => {
-  const reduction = before > 0 ? ((before - after) / before) * 100 : 0;
-  const reductionColor = reduction > 0 ? 'text-green-400' : reduction < 0 ? 'text-red-400' : 'text-slate-400';
-  const change = after - before;
-  const formatNumber = (num: number) => num.toLocaleString('en-US');
+// --- Derived/Async State Atoms ---
+export const outputAtom = atom<string>('');
+export const isLoadingAtom = atom<boolean>(false);
+export const errorAtom = atom<string | null>(null);
 
-  return (
-    <div className="flex justify-between items-center py-2">
-      <span className="text-slate-300">{label}</span>
-      <div className="flex items-center gap-4">
-        <span className="text-slate-400 tabular-nums w-16 text-right">{formatNumber(before)}</span>
-        <span className="text-xl font-bold text-white tabular-nums w-16 text-right">{formatNumber(after)}</span>
-        <span className={`text-sm font-medium w-32 text-right tabular-nums ${reductionColor}`}>
-          {change !== 0 ? `${change > 0 ? '+' : ''}${formatNumber(change)}` : ''} ({reduction.toFixed(0)}%)
-        </span>
-      </div>
-    </div>
-  );
-};
+type Stats = {
+  before: SpecStats;
+  after: SpecStats;
+} | null;
 
+export const statsAtom = atom<Stats>(null);
 
-export const StatsPanel: React.FC = () => {
-  const stats = useAtomValue(statsAtom);
-
-  if (!stats) return null;
-
-  const specStats = [
-    { label: 'Paths', before: stats.before.paths, after: stats.after.paths },
-    { label: 'Operations', before: stats.before.operations, after: stats.after.operations },
-    { label: 'Schemas', before: stats.before.schemas, after: stats.after.schemas },
-  ];
-
-  const contentStats = [
-    { label: 'Characters', before: stats.before.charCount, after: stats.after.charCount },
-    { label: 'Lines', before: stats.before.lineCount, after: stats.after.lineCount },
-    { label: 'Tokens (est.)', before: stats.before.tokenCount, after: stats.after.tokenCount },
-  ];
-
-  return (
-    <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg p-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Condensation Stats</h3>
-      <StatsHeader />
-      <div className="divide-y divide-slate-700/50">
-        {specStats.map(stat => <StatItem key={stat.label} {...stat} />)}
-      </div>
-      <div className="my-2 border-t border-slate-700/50" />
-      <div className="divide-y divide-slate-700/50">
-        {contentStats.map(stat => <StatItem key={stat.label} {...stat} />)}
-      </div>
-    </div>
-  );
-};
-```
-
-## File: src/frontend/components/ui/index.ts
-```typescript
-export * from './Tooltip';
-export * from './Section';
-export * from './Switch';
-export * from './TextInput';
-```
-
-## File: src/frontend/components/ui/TextInput.tsx
-```typescript
-import React, { useRef } from 'react';
-import { Tooltip } from './Tooltip';
-import { useInputFocus } from '../../state/motion.reuse';
-
-export const TextInput: React.FC<{ label: string; value: string[] | undefined; onChange: (value: string[]) => void; placeholder: string; tooltip?: string; }> = React.memo(({ label, value, onChange, placeholder, tooltip }) => {
-    const inputRef = useRef<HTMLDivElement>(null);
-    useInputFocus(inputRef);
-
-    return (
-        <div ref={inputRef}>
-            <label className="block text-sm text-slate-300 mb-1 flex items-center gap-2">
-                {label}
-                {tooltip && (
-                    <Tooltip text={tooltip}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </Tooltip>
-                )}
-            </label>
-            <input
-                type="text"
-                placeholder={placeholder}
-                value={value?.join(', ')}
-                onChange={(e) => onChange(e.target.value ? e.target.value.split(',').map(s => s.trim()).filter(Boolean) : [])}
-                className="w-full bg-slate-700/50 border border-slate-600 rounded-md px-3 py-2 text-sm text-white placeholder-slate-400 outline-none transition"
-            />
-        </div>
-    )
-});
-```
-
-## File: src/frontend/styles.css
-```css
-/* You can add any additional global styles here if needed */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Global performance optimizations */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Use GPU acceleration for certain animations */
-.transform,
-.transition-transform,
-.transition,
-.transition-all,
-.transition-opacity {
-  will-change: transform, opacity;
-  transform: translateZ(0);
-  backface-visibility: hidden;
-}
-
-/* Optimize for scrolling performance */
-.overflow-auto {
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-}
-
-/* Optimize tooltips */
-[class*="z-"] {
-  transform: translateZ(0);
-}
-```
-
-## File: src/shared/constants.ts
-```typescript
-import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
-
-// --- App Config ---
-export const API_PORT = 3000;
-export const API_HOST = 'localhost';
-export const API_PREFIX = '/api';
-export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
-
-// --- OpenAPI Semantics ---
-export const HTTP_METHODS: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
-export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
-
-// --- Default Extractor Config ---
-export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
-```
-
-## File: vite.config.ts
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      [API_PREFIX]: API_BASE_URL
-    }
-  }
-})
-```
-
-## File: src/frontend/components/features/ActionPanel.tsx
-```typescript
-import React, { useRef } from 'react';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { isLoadingAtom, condenseSpecAtom, specContentAtom, outputAtom } from '../../state/atoms';
-import { useButtonHover } from '../../state/motion.reuse';
-
-export const ActionPanel: React.FC = () => {
-    const isLoading = useAtomValue(isLoadingAtom);
-    const specContent = useAtomValue(specContentAtom);
-    const output = useAtomValue(outputAtom);
-    const onCondense = useSetAtom(condenseSpecAtom);
-    const buttonRef = useRef<HTMLButtonElement>(null);
-    useButtonHover(buttonRef);
-
-    return (
-        <button 
-            ref={buttonRef}
-            onClick={() => onCondense()}
-            disabled={isLoading || !specContent}
-            className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 flex items-center justify-center"
-        >
-            {isLoading ? (
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            ) : output ? 'Re-condense' : 'Condense'}
-        </button>
-    );
-}
-```
-
-## File: src/frontend/components/features/output/OutputPanel.tsx
-```typescript
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAtomValue } from 'jotai';
-import CodeMirror from '@uiw/react-codemirror';
-import { oneDark } from '@codemirror/theme-one-dark';
-import type { OutputFormat } from '../../../../shared/types';
-import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
-import { languageMap } from '../../../constants';
-
-const SkeletonLoader = () => (
-    <div className="absolute inset-0 p-4 space-y-3 animate-pulse">
-        <div className="h-4 bg-slate-700/50 rounded w-1/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/3"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-2/5"></div>
-        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
-    </div>
-);
-
-
-export const OutputPanel: React.FC<{}> = () => {
-  const output = useAtomValue(outputAtom);
-  const isLoading = useAtomValue(isLoadingAtom);
-  const error = useAtomValue(errorAtom);
-  const format = useAtomValue(outputFormatAtom);
-
-  const [copyStatus, setCopyStatus] = useState('Copy');
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (copyStatus === 'Copied!') {
-      const timer = setTimeout(() => setCopyStatus('Copy'), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [copyStatus]);
-
-  // Handle body scroll when entering/exiting fullscreen
-  useEffect(() => {
-    if (isFullScreen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    // Cleanup on unmount
-    return () => {
-      document.body.style.overflow = '';
+// --- Utility Functions ---
+const normalizeStats = (stats: any): SpecStats => {
+    if (!stats) return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
+    return {
+        paths: Number(stats.paths) || 0,
+        operations: Number(stats.operations) || 0,
+        schemas: Number(stats.schemas) || 0,
+        charCount: Number(stats.charCount) || 0,
+        lineCount: Number(stats.lineCount) || 0,
+        tokenCount: Number(stats.tokenCount) || 0,
     };
-  }, [isFullScreen]);
-
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(output);
-    setCopyStatus('Copied!');
-  }, [output]);
-
-  const handleDownload = useCallback(() => {
-    const blob = new Blob([output], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `condensed-spec.${format === 'markdown' ? 'md' : format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [output, format]);
-  
-  const handleToggleFullscreen = useCallback(() => {
-    setIsFullScreen(prev => !prev);
-  }, []);
-  
-  const panelClasses = isFullScreen 
-    ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
-    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
-
-  return (
-    <div className={panelClasses}>
-      <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
-        <div className="flex items-center gap-2">
-            <button onClick={handleToggleFullscreen} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
-                {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            </button>
-            {output && !isLoading && (
-            <>
-                <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">{copyStatus}</button>
-                <button onClick={handleDownload} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">Download</button>
-            </>
-            )}
-        </div>
-      </div>
-      <div ref={scrollContainerRef} className="flex-grow p-1 relative overflow-auto">
-        {isLoading && <SkeletonLoader />}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
-                <p className="font-bold mb-2">An error occurred:</p>
-                <pre className="whitespace-pre-wrap">{error}</pre>
-            </div>
-          </div>
-        )}
-        {!isLoading && !error && output && (
-            <CodeMirror
-                value={output}
-                height="100%"
-                extensions={[languageMap[format](), oneDark]}
-                readOnly={true}
-                theme="dark"
-                style={{ height: '100%', minHeight: '100%' }}
-            />
-        )}
-        {!isLoading && !error && !output && (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-                <p>Your condensed OpenAPI spec will appear here.</p>
-            </div>
-        )}
-      </div>
-    </div>
-  );
-};
-```
-
-## File: src/frontend/components/ui/Switch.tsx
-```typescript
-import React, { useRef } from 'react';
-import { Tooltip } from './Tooltip';
-import { useSwitchAnimation } from '../../state/motion.reuse';
-
-export const Switch: React.FC<{ label: string; checked: boolean; onChange: (checked: boolean) => void; tooltip?: string }> = React.memo(({ label, checked, onChange, tooltip }) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    useSwitchAnimation(inputRef, checked);
-
-    return (
-        <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-sm text-slate-300 flex items-center gap-2">
-                {label}
-                {tooltip && (
-                    <Tooltip text={tooltip}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </Tooltip>
-                )}
-            </span>
-            <div className="relative">
-                <input ref={inputRef} type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-                <div className="block w-10 h-6 rounded-full bg-slate-600"></div>
-                <div className="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full"></div>
-            </div>
-        </label>
-    )
-});
-```
-
-## File: src/frontend/constants.ts
-```typescript
-import { json } from '@codemirror/lang-json';
-import { yaml } from '@codemirror/lang-yaml';
-import { markdown } from '@codemirror/lang-markdown';
-import type { OutputFormat } from '../shared/types';
-
-// --- App Info ---
-export const APP_TITLE = 'OpenAPI Condenser';
-export const APP_SUBTITLE = 'Pack your OpenAPI into AI-friendly formats';
-export const NAV_LINKS = {
-    SDK: '/sdk',
-    API: '/swagger',
-    GITHUB: 'https://github.com/repomix/openapi-condenser',
-    SPONSOR: 'https://github.com/sponsors/repomix',
 };
 
-// --- Input Panel ---
-export const INPUT_DEBOUNCE_DELAY = 300; // ms
-export const URL_FETCH_DEBOUNCE_DELAY = 500; // ms
-export const DEFAULT_SPEC_FILENAME = 'spec.json';
-export const DEFAULT_URL_FILENAME = 'spec.from.url';
+// --- Action Atom (for API calls and complex state updates) ---
+export const condenseSpecAtom = atom(
+    null, // This is a write-only atom
+    async (get, set) => {
+        const specContent = get(specContentAtom);
+        if (!specContent) {
+            set(errorAtom, 'Please provide an OpenAPI specification.');
+            return;
+        }
 
+        set(isLoadingAtom, true);
+        set(errorAtom, null);
+        set(outputAtom, '');
+        set(statsAtom, null);
 
-// --- Output Panel ---
-export const languageMap: { [K in OutputFormat]: () => any } = {
-  json: () => json(),
-  yaml: () => yaml(),
-  xml: () => markdown({}), // fallback for xml
-  markdown: () => markdown({}),
-};
-```
-
-## File: src/backend/cli.ts
-```typescript
-#!/usr/bin/env bun
-import { parse } from 'cmd-ts';
-import { command, option, string, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig, OutputFormat } from './types';
-import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
-import { DEFAULT_CONFIG_PATH } from './constants';
-
-// Define CLI command
-const cmd = command({
-  name: 'openapi-condenser',
-  description: 'Extract and transform OpenAPI specifications',
-  args: {
-    config: option({
-      type: optional(string),
-      long: 'config',
-      short: 'c',
-      description: 'Path to configuration file',
-    }),
-    source: option({
-      type: optional(string),
-      long: 'source',
-      short: 's',
-      description: 'Source file path or URL',
-    }),
-    sourceType: option({
-      type: optional(string),
-      long: 'source-type',
-      description: 'Source type (local or remote)',
-    }),
-    format: option({
-      type: optional(string),
-      long: 'format',
-      short: 'f',
-      description: `Output format (${OUTPUT_FORMATS.join(', ')})`,
-    }),
-    outputPath: option({
-      type: optional(string),
-      long: 'output',
-      short: 'o',
-      description: 'Output file path',
-    }),
-    includePaths: option({
-      type: optional(string),
-      long: 'include-paths',
-      description: 'Include paths by glob patterns (comma-separated)',
-    }),
-    excludePaths: option({
-      type: optional(string),
-      long: 'exclude-paths',
-      description: 'Exclude paths by glob patterns (comma-separated)',
-    }),
-    includeTags: option({
-      type: optional(string),
-      long: 'include-tags',
-      description: 'Include endpoints by tag glob patterns (comma-separated)',
-    }),
-    excludeTags: option({
-      type: optional(string),
-      long: 'exclude-tags',
-      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
-    }),
-    methods: option({
-      type: optional(string),
-      long: 'methods',
-      description: 'Filter by HTTP methods (comma-separated)',
-    }),
-    includeDeprecated: flag({
-      long: 'include-deprecated',
-      description: 'Include deprecated endpoints',
-    }),
-    excludeSchemas: flag({
-      long: 'exclude-schemas',
-      description: 'Exclude component schemas from the output',
-    }),
-    excludeRequestBodies: flag({
-      long: 'exclude-request-bodies',
-      description: 'Exclude request bodies from the output',
-    }),
-    excludeResponses: flag({
-      long: 'exclude-responses',
-      description: 'Exclude responses from the output',
-    }),
-    verbose: flag({
-      long: 'verbose',
-      short: 'v',
-      description: 'Show verbose output',
-    }),
-  },
-  handler: async (args) => {
-    try {
-      // Load configuration
-      const configPath = args.config || DEFAULT_CONFIG_PATH;
-      let config: ExtractorConfig;
-      
-      try {
-        config = await loadConfig(configPath);
-      } catch (error) {
-        if (args.source) {
-          const format = args.format || DEFAULT_OUTPUT_FORMAT;
-          if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
-            console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
-            process.exit(1);
-          }
-          // Create minimal config if no config file but source is provided
-          config = {
+        const config = get(configAtom);
+        const payload = {
             source: {
-              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
-              path: args.source
+                content: specContent,
+                path: get(fileNameAtom),
+                type: 'memory' as const
             },
             output: {
-              format: format as OutputFormat,
+                format: get(outputFormatAtom),
             },
-          };
-        } else {
-          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
+            filter: config.filter,
+            transform: config.transform,
+        };
+
+        try {
+            const { data, error } = await client.api.condense.post(payload);
+            
+            if (error) {
+                let errorMessage = 'An unknown error occurred.';
+                const errorValue = error.value as any;
+                if (typeof errorValue === 'object' && errorValue !== null) {
+                    if ('errors' in errorValue && Array.isArray(errorValue.errors)) {
+                        errorMessage = errorValue.errors.join('\n');
+                    } else if ('message' in errorValue && typeof errorValue.message === 'string') {
+                        errorMessage = errorValue.message;
+                    }
+                }
+                set(errorAtom, errorMessage);
+            } else if (data) {
+                set(outputAtom, data.data);
+                if (data.stats) {
+                    set(statsAtom, {
+                        before: normalizeStats(data.stats.before),
+                        after: normalizeStats(data.stats.after),
+                    });
+                }
+            }
+        } catch (err) {
+            set(errorAtom, `Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            set(isLoadingAtom, false);
         }
-      }
-      
-      // Merge command line args with config
-      const mergedConfig = mergeWithCommandLineArgs(config, args);
-      
-      if (args.verbose) {
-        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
-      }
-      
-      // Run extraction
-      const result = await extractOpenAPI(mergedConfig);
-      
-      if (!result.success) {
-        if (result.errors) {
-          console.error('Errors:', result.errors.join('\n'));
-        }
-        process.exit(1);
-      }
-      
-      if (!mergedConfig.output.destination) {
-        // Output to stdout if no destination specified
-        console.log(result.data);
-      } else if (args.verbose) {
-        console.log(`Output written to: ${mergedConfig.output.destination}`);
-      }
-      
-      if (result.warnings && result.warnings.length > 0) {
-        console.warn('Warnings:', result.warnings.join('\n'));
-      }
-    } catch (error) {
-      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
     }
-  },
-});
-
-// Run the command
-await parse(cmd, process.argv.slice(2));
-```
-
-## File: src/backend/formatters/index.ts
-```typescript
-import { formatAsJson } from './json';
-import { formatAsXml } from './xml';
-import { formatAsConciseText } from './concise-text';
-import type { OutputFormat } from '../types';
-import { OpenAPIV3 } from 'openapi-types';
-
-export interface Formatter {
-  format: (data: OpenAPIV3.Document) => string;
-}
-
-const formatters: Record<OutputFormat, Formatter> = {
-  json: { format: formatAsJson },
-  yaml: { format: formatAsConciseText },
-  xml: { format: formatAsXml },
-  markdown: { format: formatAsConciseText },
-};
-
-export const getFormatter = (format: OutputFormat): Formatter => {
-  const formatter = formatters[format];
-  if (!formatter) {
-    throw new Error(`Unsupported output format: ${format}`);
-  }
-  return formatter;
-};
-```
-
-## File: src/backend/utils/fetcher.ts
-```typescript
-import { promises as fs } from 'node:fs';
-import { extname } from 'node:path';
-import YAML from 'yaml';
-import type { OpenAPIExtractorResult, Source } from '../types';
-import { OpenAPI } from 'openapi-types';
-
-/**
- * Fetch OpenAPI spec from local file, remote URL, or in-memory content
- */
-export const fetchSpec = async (
-  source: Source
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    let content: string;
-    let contentType: string | null = null;
-    
-    if (source.type === 'memory') {
-      content = source.content;
-    } else if (source.type === 'local') {
-      content = await fs.readFile(source.path, 'utf-8');
-    } else {
-      const response = await fetch(source.path);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch remote spec: ${response.status} ${response.statusText}`);
-      }
-      content = await response.text();
-      contentType = response.headers.get('Content-Type');
-    }
-    
-    const data = parseContent(content, source.path, contentType);
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    throw new Error(`Error processing spec: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Parse content based on file extension or content type, with fallback.
- */
-export const parseContent = (
-  content: string,
-  source: string,
-  contentType?: string | null,
-): OpenAPI.Document => {
-  try {
-    // 1. Try parsing based on content type for remote files
-    if (contentType) {
-      if (contentType.includes('json')) {
-        return JSON.parse(content) as OpenAPI.Document;
-      }
-      if (contentType.includes('yaml') || contentType.includes('x-yaml') || contentType.includes('yml')) {
-        return YAML.parse(content) as OpenAPI.Document;
-      }
-    }
-
-    // 2. Try parsing based on file extension
-    const ext = extname(source).toLowerCase();
-    if (ext === '.json') {
-      return JSON.parse(content) as OpenAPI.Document;
-    }
-    if (ext === '.yaml' || ext === '.yml') {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-    
-    // 3. Fallback: try parsing as JSON, then YAML
-    try {
-      return JSON.parse(content) as OpenAPI.Document;
-    } catch (jsonError) {
-      return YAML.parse(content) as OpenAPI.Document;
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to parse content from '${source}'. Not valid JSON or YAML.`,
-    );
-  }
-};
+);
 ```
 
 ## File: src/frontend/client.ts
@@ -1448,6 +2023,40 @@ import { API_BASE_URL } from '../shared/constants';
 
 // Use with the specific older version
 export const client = edenTreaty<App>(API_BASE_URL);
+```
+
+## File: tsconfig.json
+```json
+{
+  "compilerOptions": {
+    // Environment setup & latest features
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "allowJs": true,
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+
+    // Best practices
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    // Stricter flags enabled
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitAny": true
+  },
+  "include": ["src", "openapi-condenser.config.ts", "vite.config.ts", "test"],
+  "exclude": ["node_modules", "dist"]
+}
 ```
 
 ## File: src/frontend/components/features/config/ConfigPanel.tsx
@@ -1568,138 +2177,288 @@ export const ConfigPanel: React.FC = () => {
 };
 ```
 
-## File: src/frontend/state/atoms.ts
+## File: test/e2e/server.test.ts
 ```typescript
-import { atom } from 'jotai';
-import { client } from '../client';
-import type { OutputFormat, SpecStats } from '../../shared/types';
-import { DEFAULT_SPEC_FILENAME } from '../constants';
-import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { treaty } from '@elysiajs/eden';
+import YAML from 'yaml';
+import { app } from '../../src/backend/server';
+import type { App } from '../../src/backend/server';
+import { sampleSpec } from '../test.util';
 
-// --- Base State Atoms ---
-export const specContentAtom = atom<string>('');
-export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
-export const configAtom = atom(defaultConfig);
-export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
+// Using a real public spec for fetch tests
+const publicSpecUrl = 'https://petstore3.swagger.io/api/v3/openapi.json';
+const nonExistentUrl = 'https://example.com/non-existent-spec.json';
 
-// --- Derived/Async State Atoms ---
-export const outputAtom = atom<string>('');
-export const isLoadingAtom = atom<boolean>(false);
-export const errorAtom = atom<string | null>(null);
+describe('E2E API Tests', () => {
+  let server: ReturnType<typeof app.listen>;
+  let api: ReturnType<typeof treaty<App>>;
 
-type Stats = {
-  before: SpecStats;
-  after: SpecStats;
-} | null;
-
-export const statsAtom = atom<Stats>(null);
-
-// --- Utility Functions ---
-const normalizeStats = (stats: any): SpecStats => {
-    if (!stats) return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
-    return {
-        paths: Number(stats.paths) || 0,
-        operations: Number(stats.operations) || 0,
-        schemas: Number(stats.schemas) || 0,
-        charCount: Number(stats.charCount) || 0,
-        lineCount: Number(stats.lineCount) || 0,
-        tokenCount: Number(stats.tokenCount) || 0,
-    };
-};
-
-// --- Action Atom (for API calls and complex state updates) ---
-export const condenseSpecAtom = atom(
-    null, // This is a write-only atom
-    async (get, set) => {
-        const specContent = get(specContentAtom);
-        if (!specContent) {
-            set(errorAtom, 'Please provide an OpenAPI specification.');
-            return;
-        }
-
-        set(isLoadingAtom, true);
-        set(errorAtom, null);
-        set(outputAtom, '');
-        set(statsAtom, null);
-
-        const config = get(configAtom);
-        const payload = {
-            source: {
-                content: specContent,
-                path: get(fileNameAtom),
-                type: 'memory' as const
-            },
-            output: {
-                format: get(outputFormatAtom),
-            },
-            filter: config.filter,
-            transform: config.transform,
-        };
-
-        try {
-            const { data, error } = await client.api.condense.post(payload);
-            
-            if (error) {
-                let errorMessage = 'An unknown error occurred.';
-                const errorValue = error.value as any;
-                if (typeof errorValue === 'object' && errorValue !== null) {
-                    if ('errors' in errorValue && Array.isArray(errorValue.errors)) {
-                        errorMessage = errorValue.errors.join('\n');
-                    } else if ('message' in errorValue && typeof errorValue.message === 'string') {
-                        errorMessage = errorValue.message;
-                    }
-                }
-                set(errorAtom, errorMessage);
-            } else if (data) {
-                set(outputAtom, data.data);
-                if (data.stats) {
-                    set(statsAtom, {
-                        before: normalizeStats(data.stats.before),
-                        after: normalizeStats(data.stats.after),
-                    });
-                }
-            }
-        } catch (err) {
-            set(errorAtom, `Failed to process request: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-            set(isLoadingAtom, false);
-        }
+  beforeAll(() => {
+    // Start server on a random available port
+    server = app.listen(0);
+    const port = server.server?.port;
+    if (!port) {
+        throw new Error('Server port not available');
     }
-);
-```
+    api = treaty<App>(`http://localhost:${port}`);
+  });
 
-## File: tsconfig.json
-```json
-{
-  "compilerOptions": {
-    // Environment setup & latest features
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": true,
+  afterAll(() => {
+    server.stop(true);
+  });
 
-    // Bundler mode
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": false,
-    "noEmit": true,
+  describe('/api/fetch-spec', () => {
+    it('should fetch a valid remote OpenAPI spec', async () => {
+      const { data, error, status } = await api['api']['fetch-spec'].get({
+        query: { url: publicSpecUrl },
+      });
 
-    // Best practices
-    "strict": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
+      expect(status).toBe(200);
+      expect(error).toBeNull();
+      expect(data?.content).toBeString();
+      expect(() => JSON.parse(data!.content)).not.toThrow();
+      const parsed = JSON.parse(data!.content);
+      expect(parsed.openapi).toStartWith('3.');
+    }, 10000);
 
-    // Stricter flags enabled
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitAny": true
-  },
-  "include": ["src", "openapi-condenser.config.ts", "vite.config.ts", "test"],
-  "exclude": ["node_modules", "dist"]
-}
+    it('should return 400 for a missing URL parameter', async () => {
+        // @ts-expect-error - testing invalid input
+        const { data, error, status } = await api['api']['fetch-spec'].get({ query: {} });
+        expect(status).toBe(400);
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toBe('URL parameter is required');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
+    });
+
+    it('should return 400 for an invalid URL format', async () => {
+        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'not-a-url' } });
+        expect(status).toBe(400);
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toInclude('Invalid URL');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
+    });
+    
+    it('should return 403 when trying to fetch from a private network address (SSRF protection)', async () => {
+        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'http://127.0.0.1/spec.json' } });
+        expect(status).toBe(403);
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toBe('Fetching specs from private or local network addresses is forbidden.');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
+    });
+
+    it('should handle non-existent remote files gracefully', async () => {
+        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: nonExistentUrl } });
+        expect(status).toBe(404);
+        if (error?.value && 'error' in error.value) {
+            expect(error.value.error).toInclude('Failed to fetch spec');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
+    });
+  });
+
+  describe('/api/condense', () => {
+    it('should condense a spec to YAML format', async () => {
+      const { data, error, status } = await api.api.condense.post({
+        source: {
+          content: JSON.stringify(sampleSpec),
+          path: 'spec.json',
+        },
+        output: { format: 'yaml' },
+      });
+
+      expect(status).toBe(200);
+      expect(error).toBeNull();
+      expect(data?.success).toBe(true);
+      expect(data?.data).toBeString();
+
+      // Check if the output is valid YAML
+      let parsedYaml: any;
+      expect(() => parsedYaml = YAML.parse(data!.data)).not.toThrow();
+      
+      if(parsedYaml) {
+        expect(parsedYaml.openapi).toBe('3.0.0');
+        expect(parsedYaml.info.title).toBe('Sample API');
+      } else {
+        throw new Error('parsedYaml should not be undefined');
+      }
+    });
+    
+    it('should condense a spec to Markdown format', async () => {
+        const { data, error, status } = await api.api.condense.post({
+            source: {
+              content: JSON.stringify(sampleSpec),
+              path: 'spec.json',
+            },
+            output: { format: 'markdown' },
+        });
+
+        expect(status).toBe(200);
+        expect(error).toBeNull();
+        expect(data?.success).toBe(true);
+        expect(data?.data).toBeString();
+        expect(data?.data).toStartWith('# Sample API');
+        expect(data?.data).toInclude('## Endpoints');
+        expect(data?.data).toInclude('### `GET` /users');
+    });
+
+    it('should filter paths based on include glob pattern', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            filter: {
+                paths: { include: ['/users'] },
+            },
+        });
+        
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+        
+        const result = JSON.parse(data.data);
+        expect(Object.keys(result.paths)).toEqual(['/users']);
+        expect(result.paths['/users/{userId}']).toBeUndefined();
+        // Check stats
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(1);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
+    });
+    
+    it('should filter paths based on exclude glob pattern', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            filter: {
+                paths: { exclude: ['/internal/**'] },
+            },
+        });
+        
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
+        expect(Object.keys(result.paths)).not.toInclude('/internal/status');
+        expect(Object.keys(result.paths)).toHaveLength(3);
+        // Check stats
+        expect(data.stats.before.paths).toBe(4);
+        expect(data.stats.after.paths).toBe(3);
+        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
+    });
+
+    it('should filter by tags', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            filter: {
+                tags: { include: ['users'] },
+            },
+        });
+        
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
+        expect(Object.keys(result.paths)).toEqual(['/users', '/users/{userId}']);
+        expect(data.stats?.after.operations).toBe(2);
+    });
+
+    it('should exclude deprecated endpoints by default', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+        });
+        
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+        
+        const result = JSON.parse(data.data);
+        expect(result.paths['/internal/status']).toBeUndefined();
+    });
+
+    it('should include deprecated endpoints when requested', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            filter: {
+                includeDeprecated: true,
+            },
+        });
+        
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
+        expect(result.paths['/internal/status']).toBeDefined();
+    });
+
+    it('should remove unused components after filtering', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            filter: {
+                tags: { include: ['items'] },
+            },
+        });
+
+        expect(data).toBeDefined();
+        expect(data?.stats).toBeDefined();
+        if (!data || !data.stats) throw new Error("Data or stats missing");
+
+        const result = JSON.parse(data.data);
+        // Only '/items' path should remain
+        expect(Object.keys(result.paths)).toEqual(['/items']);
+        // Only 'Item' schema should remain, 'User' and 'UnusedSchema' should be gone
+        expect(Object.keys(result.components.schemas)).toEqual(['Item']);
+        expect(data.stats.before.schemas).toBe(3);
+        expect(data.stats.after.schemas).toBe(1);
+    });
+
+    it('should apply transformations like removing descriptions', async () => {
+        const { data } = await api.api.condense.post({
+            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
+            output: { format: 'json' },
+            transform: {
+                removeDescriptions: true,
+            },
+        });
+
+        expect(data).toBeDefined();
+        if (!data) throw new Error("Data missing");
+
+        const result = JSON.parse(data.data);
+        expect(result.info.description).toBeUndefined();
+        expect(result.paths['/users'].get.description).toBeUndefined();
+        expect(result.components.schemas.User.properties.id.description).toBeUndefined();
+    });
+
+    it('should return 400 for invalid source content', async () => {
+        const { error, status } = await api.api.condense.post({
+            source: {
+              content: 'this is not a valid json or yaml',
+              path: 'spec.json',
+            },
+            output: { format: 'json' },
+        });
+
+        expect(status).toBe(400);
+
+        if (error?.value && 'success' in error.value && 'errors' in error.value && Array.isArray(error.value.errors)) {
+            expect(error.value.success).toBe(false);
+            expect(error.value.errors).toContain('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
+        } else {
+            throw new Error('Unexpected error response format');
+        }
+    });
+  });
+});
 ```
 
 ## File: src/backend/types.ts
@@ -1783,6 +2542,135 @@ export type OpenAPIExtractorResult = {
 export type SchemaTransformer = (
   schema: OpenAPIV3.SchemaObject,
 ) => OpenAPIV3.SchemaObject;
+```
+
+## File: src/frontend/components/features/output/OutputPanel.tsx
+```typescript
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
+import CodeMirror from '@uiw/react-codemirror';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { outputAtom, isLoadingAtom, errorAtom, outputFormatAtom } from '../../../state/atoms';
+import { languageMap } from '../../../constants';
+
+const SkeletonLoader = () => (
+    <div className="absolute inset-0 p-4 space-y-3 animate-pulse">
+        <div className="h-4 bg-slate-700/50 rounded w-1/4"></div>
+        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
+        <div className="h-4 bg-slate-700/50 rounded w-1/3"></div>
+        <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
+        <div className="h-4 bg-slate-700/50 rounded w-2/5"></div>
+        <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
+    </div>
+);
+
+
+export const OutputPanel: React.FC<{}> = () => {
+  const output = useAtomValue(outputAtom);
+  const isLoading = useAtomValue(isLoadingAtom);
+  const error = useAtomValue(errorAtom);
+  const format = useAtomValue(outputFormatAtom);
+
+  const [copyStatus, setCopyStatus] = useState('Copy');
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (copyStatus === 'Copied!') {
+      const timer = setTimeout(() => setCopyStatus('Copy'), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copyStatus]);
+
+  // Sync isFullScreen state with the browser's fullscreen status
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(output);
+    setCopyStatus('Copied!');
+  }, [output]);
+
+  const handleDownload = useCallback(() => {
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `condensed-spec.${format === 'markdown' ? 'md' : format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [output, format]);
+  
+  const handleToggleFullscreen = useCallback(() => {
+    if (!panelRef.current) return;
+    
+    if (!document.fullscreenElement) {
+      panelRef.current.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }, []);
+  
+  const panelClasses = isFullScreen 
+    ? "bg-slate-900 flex flex-col"
+    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
+
+  return (
+    <div ref={panelRef} className={panelClasses}>
+      <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
+        <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
+        <div className="flex items-center gap-2">
+            <button onClick={handleToggleFullscreen} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
+                {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </button>
+            {output && !isLoading && (
+            <>
+                <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">{copyStatus}</button>
+                <button onClick={handleDownload} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">Download</button>
+            </>
+            )}
+        </div>
+      </div>
+      <div className="flex-grow p-1 relative overflow-auto">
+        {isLoading && <SkeletonLoader />}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
+                <p className="font-bold mb-2">An error occurred:</p>
+                <pre className="whitespace-pre-wrap">{error}</pre>
+            </div>
+          </div>
+        )}
+        {!isLoading && !error && output && (
+            <CodeMirror
+                value={output}
+                height="100%"
+                extensions={[languageMap[format](), oneDark]}
+                readOnly={true}
+                theme="dark"
+                style={{ height: '100%', minHeight: '100%' }}
+            />
+        )}
+        {!isLoading && !error && !output && (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                <p>Your condensed OpenAPI spec will appear here.</p>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
 ```
 
 ## File: src/backend/transformer.ts
@@ -2121,7 +3009,7 @@ export const transformOpenAPI = (
       delete transformed.servers;
     }
     if (transformOpts.includeInfo === false) {
-      delete transformed.info;
+      delete (transformed as any).info;
     }
 
     if (transformed.paths) {
@@ -2137,7 +3025,7 @@ export const transformOpenAPI = (
                 delete operation.requestBody;
               }
               if (transformOpts.includeResponses === false) {
-                delete operation.responses;
+                delete (operation as any).responses;
               }
             }
           }
@@ -2182,7 +3070,7 @@ export const composeTransformers =
 
 ## File: src/backend/extractor.ts
 ```typescript
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } from './types';
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
@@ -2207,11 +3095,12 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
   const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
 
   const validMethods = new Set(HTTP_METHODS);
-  const paths = Object.keys(spec.paths || {});
+  const pathItems = spec.paths || {};
+  const paths = Object.keys(pathItems);
   const operations = paths.reduce((count, path) => {
-    const pathItem = spec.paths[path];
+    const pathItem = pathItems[path];
     if (pathItem && typeof pathItem === 'object') {
-      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
+      return count + Object.keys(pathItem).filter(method => validMethods.has(method as HttpMethod)).length;
     }
     return count;
   }, 0);

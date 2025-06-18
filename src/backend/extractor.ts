@@ -1,4 +1,4 @@
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats, HttpMethod } from './types';
 import { fetchSpec } from './utils/fetcher';
 import { transformOpenAPI } from './transformer';
 import { getFormatter } from './formatters';
@@ -13,21 +13,21 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
     return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
   }
 
-  const compactSpecString = JSON.stringify(spec);
   const prettySpecString = JSON.stringify(spec, null, 2);
 
   const charCount = prettySpecString.length;
   const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count, as it varies by model.
-  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
+  // Rough approximation of token count.
+  // Using charCount (from pretty-printed string) for consistency with how formatted output stats are calculated.
+  const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
 
   const validMethods = new Set(HTTP_METHODS);
-  const paths = Object.keys(spec.paths || {});
+  const pathItems = spec.paths || {};
+  const paths = Object.keys(pathItems);
   const operations = paths.reduce((count, path) => {
-    const pathItem = spec.paths[path];
+    const pathItem = pathItems[path];
     if (pathItem && typeof pathItem === 'object') {
-      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
+      return count + Object.keys(pathItem).filter(method => validMethods.has(method as HttpMethod)).length;
     }
     return count;
   }, 0);

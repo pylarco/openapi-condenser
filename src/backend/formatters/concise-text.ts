@@ -59,7 +59,7 @@ const formatProperties = (
     const typeStr = formatSchemaType(propSchema, doc);
     const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
 
-    propsMarkdown += `${indentStr}- ${propName}:${typeStr}${requiredStr}${descriptionStr}\n`;
+    propsMarkdown += `${indentStr}* \`${propName}\`: \`${typeStr}\`${requiredStr}${descriptionStr}\n`;
 
     let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
     const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
@@ -79,23 +79,23 @@ const formatProperties = (
 
 const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
     let output = '';
-    output += `${method.toUpperCase()} ${path}\n`;
+    output += `### \`${method.toUpperCase()}\` ${path}\n`;
 
     const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
     if (description) {
-      output += `D: ${description}\n`;
+      output += `\n${description}\n`;
     }
 
     // Parameters
     if (operation.parameters?.length) {
-      output += `P:\n`;
+      output += `\n**Parameters**\n`;
       for (const paramRef of operation.parameters) {
         const param = resolveRef(paramRef, data);
         const schema = param.schema as OpenAPIV3.SchemaObject;
         const type = schema ? formatSchemaType(schema, data) : 'any';
-        const required = param.required ? 'required' : 'optional';
+        const required = param.required ? ' (required)' : '';
         const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `  - ${param.name}: ${type} (${param.in}, ${required})${paramDesc}\n`;
+        output += `* \`${param.name}\` (*${param.in}*): \`${type}\`${required}${paramDesc}\n`;
       }
     }
     
@@ -105,17 +105,9 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
       if (requestBody.content) {
         const contentEntries = Object.entries(requestBody.content);
         if (contentEntries.length > 0) {
-            const firstEntry = contentEntries[0];
-            if (firstEntry) {
-                const schemaName = formatSchemaType(firstEntry[1].schema, data);
-                if (contentEntries.length === 1) {
-                    output += `B: ${shortenContentType(firstEntry[0])} -> ${schemaName}\n`;
-                } else {
-                    output += `B:\n`;
-                    for (const [contentType, mediaType] of contentEntries) {
-                        output += `  - ${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}\n`;
-                    }
-                }
+            output += `\n**Request Body**\n`;
+            for (const [contentType, mediaType] of contentEntries) {
+                output += `* \`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\`\n`;
             }
         }
       }
@@ -123,7 +115,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
 
     // Responses
     if (operation.responses) {
-      output += `R:\n`;
+      output += `\n**Responses**\n`;
       const groupedResponses: { [key: string]: string[] } = {};
       
       for (const [code, responseRef] of Object.entries(operation.responses)) {
@@ -131,7 +123,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
         const responseIdParts: string[] = [];
         if (response.content) {
             for (const [contentType, mediaType] of Object.entries(response.content)) {
-                responseIdParts.push(`${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}`);
+                responseIdParts.push(`\`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\``);
             }
         }
         
@@ -144,7 +136,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
       }
 
       for (const [responseId, codes] of Object.entries(groupedResponses)) {
-           output += `  ${codes.join(', ')}: ${responseId}\n`;
+           output += `* \`${codes.join(', ')}\`: ${responseId}\n`;
       }
     }
     return output;
@@ -154,22 +146,23 @@ const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV
     let output = '';
     const schema = resolveRef(schemaRef, data);
       
-    output += `SCHEMA: ${name}\n`;
+    output += `### ${name}\n`;
     if (schema.description) {
-        output += `D: ${schema.description.replace(/\n/g, ' ')}\n`;
+        output += `\n${schema.description.replace(/\n/g, ' ')}\n`;
     }
 
     if (schema.type === 'object' && schema.properties) {
-        output += 'PROPS:\n';
-        output += formatProperties(schema.properties, schema.required, data, 1);
+        output += '\n**Properties**\n';
+        output += formatProperties(schema.properties, schema.required, data, 0);
     } else if (schema.type === 'array' && schema.items) {
-        output += `ARRAY OF: ${formatSchemaType(schema.items, data)}\n`;
+        output += `\n**Type**: Array of \`${formatSchemaType(schema.items, data)}\`\n`;
         const resolvedItems = resolveRef(schema.items, data);
         if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 1);
+             output += "\n**Item Properties**\n";
+             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 0);
         }
     } else if (schema.type) {
-        output += `TYPE: ${schema.type}\n`;
+        output += `\n**Type**: \`${schema.type}\`\n`;
     }
     return output;
 }
@@ -178,9 +171,21 @@ const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV
  * Format data as a concise text format for LLMs.
  */
 export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
+  const parts: string[] = [];
+
+  // Info Block
+  if (data.info) {
+    let infoBlock = `# ${data.info.title}`;
+    if (data.info.version) {
+        infoBlock += ` (v${data.info.version})`;
+    }
+    if (data.info.description) {
+        infoBlock += `\n\n${data.info.description.trim()}`;
+    }
+    parts.push(infoBlock);
+  }
+
   const endpoints: string[] = [];
-  const schemas: string[] = [];
-  
   // Endpoints
   if (data.paths) {
     for (const [path, pathItem] of Object.entries(data.paths)) {
@@ -198,7 +203,12 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
       }
     }
   }
+  
+  if (endpoints.length > 0) {
+      parts.push("## Endpoints\n\n" + endpoints.join('\n---\n\n'));
+  }
 
+  const schemas: string[] = [];
   // Schemas
   if (data.components?.schemas) {
     for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
@@ -206,14 +216,9 @@ export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
     }
   }
 
-  let output = endpoints.join('\n');
-  
   if (schemas.length > 0) {
-      if (output.length > 0) {
-        output += '\n---\n\n';
-      }
-      output += schemas.join('\n');
+      parts.push("## Schemas\n\n" + schemas.join('\n---\n\n'));
   }
   
-  return output.trim();
+  return parts.join('\n\n---\n\n').trim();
 };

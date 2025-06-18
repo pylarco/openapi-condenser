@@ -3,14 +3,19 @@ import { formatAsXml } from './xml';
 import { formatAsConciseText } from './concise-text';
 import type { OutputFormat } from '../types';
 import { OpenAPIV3 } from 'openapi-types';
+import YAML from 'yaml';
 
 export interface Formatter {
   format: (data: OpenAPIV3.Document) => string;
 }
 
+const formatAsYaml = (data: OpenAPIV3.Document): string => {
+  return YAML.stringify(data);
+};
+
 const formatters: Record<OutputFormat, Formatter> = {
   json: { format: formatAsJson },
-  yaml: { format: formatAsConciseText },
+  yaml: { format: formatAsYaml },
   xml: { format: formatAsXml },
   markdown: { format: formatAsConciseText },
 };

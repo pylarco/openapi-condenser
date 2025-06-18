@@ -200,3 +200,20 @@ full
 ------------------
 
 fix test and linter
+
+-------------------
+
+make the algorithm efficient but effective to be running in serverless for cost. do it without features break
+
+-------------------
+
+prepare the project so that ready to deploy to wrangler cloudflare worker. along with backend, frontend
+
+------------------
+
+
+I think, all non cloudflare worker environment apis is not working, here the browser console log
+:5173/api/condense:1
+
+Generated code
+Failed to load resource: the server responded with a status of 400 (Bad Request)
