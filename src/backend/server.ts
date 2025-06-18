@@ -10,7 +10,7 @@ import { checkUrlSafety } from './utils/ssrf';
 export const app = new Elysia()
   .use(swagger())
   .use(cors({
-    origin: /^http:\/\/localhost(:\d+)?$/,
+    origin: [/^http:\/\/localhost(:\d+)?$/, /\.pages\.dev$/],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
