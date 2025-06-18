@@ -41,6 +41,16 @@ const shortenContentType = (contentType: string): string => {
     return contentType;
 };
 
+const shortenParamIn = (paramIn: string): string => {
+    switch (paramIn) {
+        case 'query': return 'q';
+        case 'path': return 'p';
+        case 'header': return 'h';
+        case 'cookie': return 'c';
+        default: return paramIn;
+    }
+};
+
 
 const formatProperties = (
   properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
@@ -95,7 +105,7 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
         const type = schema ? formatSchemaType(schema, data) : 'any';
         const required = param.required ? ' (required)' : '';
         const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `* \`${param.name}\` (*${param.in}*): \`${type}\`${required}${paramDesc}\n`;
+        output += `* \`${param.name}\` ${shortenParamIn(param.in)}: \`${type}\`${required}${paramDesc}\n`;
       }
     }
     
@@ -116,21 +126,35 @@ const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.Opera
     // Responses
     if (operation.responses) {
       output += `\nR:\n`;
+      
+      const responseGroups: Map<string, string[]> = new Map();
+
       for (const [code, responseRef] of Object.entries(operation.responses)) {
         const response = resolveRef(responseRef, data);
-        const responseIdParts: string[] = [];
+        let responseId = 'No description';
+
         if (response.content) {
-            for (const [contentType, mediaType] of Object.entries(response.content)) {
-                responseIdParts.push(`\`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\``);
+            // Take the first content type's schema as the identifier.
+            const firstContent = Object.values(response.content)[0];
+            if (firstContent?.schema) {
+                responseId = `\`${formatSchemaType(firstContent.schema, data)}\``;
             }
         }
         
-        let responseId = responseIdParts.join(', ');
-        if (!responseId) {
-            responseId = response.description?.replace(/\n/g, ' ') || 'No description';
+        if (responseId === 'No description' && response.description) {
+            // Fallback to description if no content/schema
+            responseId = response.description.replace(/\n/g, ' ');
         }
 
-        output += `* \`${code}\`: ${responseId}\n`;
+        if (!responseGroups.has(responseId)) {
+            responseGroups.set(responseId, []);
+        }
+        responseGroups.get(responseId)!.push(code);
+      }
+
+      for (const [responseId, codes] of responseGroups.entries()) {
+        const codesStr = codes.map(c => `\`${c}\``).join(', ');
+        output += `* ${codesStr}: ${responseId}\n`;
       }
     }
     return output;
