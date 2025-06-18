@@ -1,4 +1,5 @@
 This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+The content has been processed where security check has been disabled.
 
 # Directory Structure
 ```
@@ -721,241 +722,6 @@ describe('transformer.ts unit tests', () => {
 });
 ```
 
-## File: src/backend/formatters/concise-text.ts
-```typescript
-import { OpenAPIV3 } from 'openapi-types';
-import { contentTypeMappings } from '../constants';
-import { HTTP_METHODS } from '../../shared/constants';
-
-const resolveRef = <T extends object>(
-  refObj: OpenAPIV3.ReferenceObject | T,
-  doc: OpenAPIV3.Document,
-): T => {
-  if (!refObj || typeof refObj !== 'object' || !('$ref' in refObj))
-    return refObj as T;
-
-  const refPath = refObj.$ref.replace('#/components/', '').split('/');
-  let current: any = doc.components;
-  for (const part of refPath) {
-    current = current?.[part];
-  }
-  return (current || refObj) as T;
-};
-
-const formatSchemaType = (
-  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
-  doc: OpenAPIV3.Document,
-): string => {
-  if (!schema) return 'any';
-  if ('$ref' in schema) {
-    return schema.$ref.split('/').pop() || 'any';
-  }
-  if (schema.type === 'array' && schema.items) {
-    const itemType = formatSchemaType(schema.items, doc);
-    return `array<${itemType}>`;
-  }
-  return schema.type || 'any';
-};
-
-const shortenContentType = (contentType: string): string => {
-    for (const [key, shortName] of contentTypeMappings) {
-        if (contentType.includes(key)) {
-            return shortName;
-        }
-    }
-    return contentType;
-};
-
-
-const formatProperties = (
-  properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
-  required: string[] | undefined,
-  doc: OpenAPIV3.Document,
-  indent = 0,
-): string => {
-  let propsMarkdown = '';
-  const indentStr = '  '.repeat(indent);
-
-  for (const [propName, propSchema] of Object.entries(properties)) {
-    const resolvedPropSchema = resolveRef(propSchema, doc);
-    const isRequired = required?.includes(propName);
-    const requiredStr = isRequired ? ' (required)' : '';
-    
-    const typeStr = formatSchemaType(propSchema, doc);
-    const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
-
-    propsMarkdown += `${indentStr}- ${propName}:${typeStr}${requiredStr}${descriptionStr}\n`;
-
-    let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
-    const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
-
-    if (resolvedPropSchema.type === 'object') {
-        nestedPropsSchema = resolvedPropSchema;
-    } else if (resolvedItems?.type === 'object') {
-        nestedPropsSchema = resolvedItems;
-    }
-
-    if (nestedPropsSchema?.properties) {
-        propsMarkdown += formatProperties(nestedPropsSchema.properties, nestedPropsSchema.required, doc, indent + 1);
-    }
-  }
-  return propsMarkdown;
-};
-
-const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    output += `${method.toUpperCase()} ${path}\n`;
-
-    const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
-    if (description) {
-      output += `D: ${description}\n`;
-    }
-
-    // Parameters
-    if (operation.parameters?.length) {
-      output += `P:\n`;
-      for (const paramRef of operation.parameters) {
-        const param = resolveRef(paramRef, data);
-        const schema = param.schema as OpenAPIV3.SchemaObject;
-        const type = schema ? formatSchemaType(schema, data) : 'any';
-        const required = param.required ? 'required' : 'optional';
-        const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
-        output += `  - ${param.name}: ${type} (${param.in}, ${required})${paramDesc}\n`;
-      }
-    }
-    
-    // Request Body
-    if (operation.requestBody) {
-      const requestBody = resolveRef(operation.requestBody, data);
-      if (requestBody.content) {
-        const contentEntries = Object.entries(requestBody.content);
-        if (contentEntries.length > 0) {
-            const firstEntry = contentEntries[0];
-            if (firstEntry) {
-                const schemaName = formatSchemaType(firstEntry[1].schema, data);
-                if (contentEntries.length === 1) {
-                    output += `B: ${shortenContentType(firstEntry[0])} -> ${schemaName}\n`;
-                } else {
-                    output += `B:\n`;
-                    for (const [contentType, mediaType] of contentEntries) {
-                        output += `  - ${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}\n`;
-                    }
-                }
-            }
-        }
-      }
-    }
-
-    // Responses
-    if (operation.responses) {
-      output += `R:\n`;
-      const groupedResponses: { [key: string]: string[] } = {};
-      
-      for (const [code, responseRef] of Object.entries(operation.responses)) {
-        const response = resolveRef(responseRef, data);
-        const responseIdParts: string[] = [];
-        if (response.content) {
-            for (const [contentType, mediaType] of Object.entries(response.content)) {
-                responseIdParts.push(`${shortenContentType(contentType)} -> ${formatSchemaType(mediaType.schema, data)}`);
-            }
-        }
-        
-        let responseId = responseIdParts.join(', ');
-        if (!responseId) {
-            responseId = response.description?.replace(/\n/g, ' ') || 'No description';
-        }
-
-        groupedResponses[responseId] = [...(groupedResponses[responseId] || []), code];
-      }
-
-      for (const [responseId, codes] of Object.entries(groupedResponses)) {
-           output += `  ${codes.join(', ')}: ${responseId}\n`;
-      }
-    }
-    return output;
-}
-
-const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject, data: OpenAPIV3.Document): string => {
-    let output = '';
-    const schema = resolveRef(schemaRef, data);
-      
-    output += `SCHEMA: ${name}\n`;
-    if (schema.description) {
-        output += `D: ${schema.description.replace(/\n/g, ' ')}\n`;
-    }
-
-    if (schema.type === 'object' && schema.properties) {
-        output += 'PROPS:\n';
-        output += formatProperties(schema.properties, schema.required, data, 1);
-    } else if (schema.type === 'array' && schema.items) {
-        output += `ARRAY OF: ${formatSchemaType(schema.items, data)}\n`;
-        const resolvedItems = resolveRef(schema.items, data);
-        if (resolvedItems.type === 'object' && resolvedItems.properties) {
-             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 1);
-        }
-    } else if (schema.type) {
-        output += `TYPE: ${schema.type}\n`;
-    }
-    return output;
-}
-
-/**
- * Format data as a concise text format for LLMs.
- */
-export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
-  const parts: string[] = [];
-
-  // Info Block
-  if (data.info) {
-    let infoBlock = `# ${data.info.title}`;
-    if (data.info.version) {
-        infoBlock += ` (v${data.info.version})`;
-    }
-    if (data.info.description) {
-        infoBlock += `\n\n${data.info.description.trim()}`;
-    }
-    parts.push(infoBlock);
-  }
-
-  const endpoints: string[] = [];
-  // Endpoints
-  if (data.paths) {
-    for (const [path, pathItem] of Object.entries(data.paths)) {
-      if (!pathItem) continue;
-      
-      const validMethods = Object.keys(pathItem).filter(method => 
-        HTTP_METHODS.includes(method as any)
-      ) as (keyof typeof pathItem)[];
-
-      for (const method of validMethods) {
-        const operation = pathItem[method] as OpenAPIV3.OperationObject;
-        if (!operation || typeof operation !== 'object' || !('responses' in operation)) continue;
-        
-        endpoints.push(formatEndpoint(method, path, operation, data));
-      }
-    }
-  }
-  
-  if (endpoints.length > 0) {
-      parts.push(endpoints.join('\n'));
-  }
-
-  const schemas: string[] = [];
-  // Schemas
-  if (data.components?.schemas) {
-    for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
-        schemas.push(formatSchema(name, schemaRef, data));
-    }
-  }
-
-  if (schemas.length > 0) {
-      parts.push(schemas.join('\n'));
-  }
-  
-  return parts.join('\n\n---\n\n').trim();
-};
-```
-
 ## File: src/frontend/components/features/ActionPanel.tsx
 ```typescript
 import React, { useRef } from 'react';
@@ -1319,6 +1085,234 @@ const cmd = command({
 await parse(cmd, process.argv.slice(2));
 ```
 
+## File: src/backend/formatters/concise-text.ts
+```typescript
+import { OpenAPIV3 } from 'openapi-types';
+import { contentTypeMappings } from '../constants';
+import { HTTP_METHODS } from '../../shared/constants';
+
+const resolveRef = <T extends object>(
+  refObj: OpenAPIV3.ReferenceObject | T,
+  doc: OpenAPIV3.Document,
+): T => {
+  if (!refObj || typeof refObj !== 'object' || !('$ref' in refObj))
+    return refObj as T;
+
+  const refPath = refObj.$ref.replace('#/components/', '').split('/');
+  let current: any = doc.components;
+  for (const part of refPath) {
+    current = current?.[part];
+  }
+  return (current || refObj) as T;
+};
+
+const formatSchemaType = (
+  schema: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject | undefined,
+  doc: OpenAPIV3.Document,
+): string => {
+  if (!schema) return 'any';
+  if ('$ref' in schema) {
+    return schema.$ref.split('/').pop() || 'any';
+  }
+  if (schema.type === 'array' && schema.items) {
+    const itemType = formatSchemaType(schema.items, doc);
+    return `array<${itemType}>`;
+  }
+  return schema.type || 'any';
+};
+
+const shortenContentType = (contentType: string): string => {
+    for (const [key, shortName] of contentTypeMappings) {
+        if (contentType.includes(key)) {
+            return shortName;
+        }
+    }
+    return contentType;
+};
+
+
+const formatProperties = (
+  properties: { [name: string]: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject },
+  required: string[] | undefined,
+  doc: OpenAPIV3.Document,
+  indent = 0,
+): string => {
+  let propsMarkdown = '';
+  const indentStr = '  '.repeat(indent);
+
+  for (const [propName, propSchema] of Object.entries(properties)) {
+    const resolvedPropSchema = resolveRef(propSchema, doc);
+    const isRequired = required?.includes(propName);
+    const requiredStr = isRequired ? ' (required)' : '';
+    
+    const typeStr = formatSchemaType(propSchema, doc);
+    const descriptionStr = resolvedPropSchema.description ? ` - ${resolvedPropSchema.description.split('\n')[0]}` : '';
+
+    propsMarkdown += `${indentStr}* \`${propName}\`: \`${typeStr}\`${requiredStr}${descriptionStr}\n`;
+
+    let nestedPropsSchema: OpenAPIV3.SchemaObject | undefined;
+    const resolvedItems = resolvedPropSchema.type === 'array' && resolvedPropSchema.items ? resolveRef(resolvedPropSchema.items, doc) : undefined;
+
+    if (resolvedPropSchema.type === 'object') {
+        nestedPropsSchema = resolvedPropSchema;
+    } else if (resolvedItems?.type === 'object') {
+        nestedPropsSchema = resolvedItems;
+    }
+
+    if (nestedPropsSchema?.properties) {
+        propsMarkdown += formatProperties(nestedPropsSchema.properties, nestedPropsSchema.required, doc, indent + 1);
+    }
+  }
+  return propsMarkdown;
+};
+
+const formatEndpoint = (method: string, path: string, operation: OpenAPIV3.OperationObject, data: OpenAPIV3.Document): string => {
+    let output = '';
+    output += `### \`${method.toUpperCase()}\` ${path}\n`;
+
+    const description = (operation.summary || operation.description || '').replace(/\n/g, ' ');
+    if (description) {
+      output += `\n${description}\n`;
+    }
+
+    // Parameters
+    if (operation.parameters?.length) {
+      output += `\n**Parameters**\n`;
+      for (const paramRef of operation.parameters) {
+        const param = resolveRef(paramRef, data);
+        const schema = param.schema as OpenAPIV3.SchemaObject;
+        const type = schema ? formatSchemaType(schema, data) : 'any';
+        const required = param.required ? ' (required)' : '';
+        const paramDesc = param.description ? ` - ${param.description.replace(/\n/g, ' ')}` : '';
+        output += `* \`${param.name}\` (*${param.in}*): \`${type}\`${required}${paramDesc}\n`;
+      }
+    }
+    
+    // Request Body
+    if (operation.requestBody) {
+      const requestBody = resolveRef(operation.requestBody, data);
+      if (requestBody.content) {
+        const contentEntries = Object.entries(requestBody.content);
+        if (contentEntries.length > 0) {
+            output += `\n**Request Body**\n`;
+            for (const [contentType, mediaType] of contentEntries) {
+                output += `* \`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\`\n`;
+            }
+        }
+      }
+    }
+
+    // Responses
+    if (operation.responses) {
+      output += `\n**Responses**\n`;
+      const groupedResponses: { [key: string]: string[] } = {};
+      
+      for (const [code, responseRef] of Object.entries(operation.responses)) {
+        const response = resolveRef(responseRef, data);
+        const responseIdParts: string[] = [];
+        if (response.content) {
+            for (const [contentType, mediaType] of Object.entries(response.content)) {
+                responseIdParts.push(`\`${shortenContentType(contentType)}\` -> \`${formatSchemaType(mediaType.schema, data)}\``);
+            }
+        }
+        
+        let responseId = responseIdParts.join(', ');
+        if (!responseId) {
+            responseId = response.description?.replace(/\n/g, ' ') || 'No description';
+        }
+
+        groupedResponses[responseId] = [...(groupedResponses[responseId] || []), code];
+      }
+
+      for (const [responseId, codes] of Object.entries(groupedResponses)) {
+           output += `* \`${codes.join(', ')}\`: ${responseId}\n`;
+      }
+    }
+    return output;
+}
+
+const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject, data: OpenAPIV3.Document): string => {
+    let output = '';
+    const schema = resolveRef(schemaRef, data);
+      
+    output += `### ${name}\n`;
+    if (schema.description) {
+        output += `\n${schema.description.replace(/\n/g, ' ')}\n`;
+    }
+
+    if (schema.type === 'object' && schema.properties) {
+        output += '\n**Properties**\n';
+        output += formatProperties(schema.properties, schema.required, data, 0);
+    } else if (schema.type === 'array' && schema.items) {
+        output += `\n**Type**: Array of \`${formatSchemaType(schema.items, data)}\`\n`;
+        const resolvedItems = resolveRef(schema.items, data);
+        if (resolvedItems.type === 'object' && resolvedItems.properties) {
+             output += "\n**Item Properties**\n";
+             output += formatProperties(resolvedItems.properties, resolvedItems.required, data, 0);
+        }
+    } else if (schema.type) {
+        output += `\n**Type**: \`${schema.type}\`\n`;
+    }
+    return output;
+}
+
+/**
+ * Format data as a concise text format for LLMs.
+ */
+export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
+  const parts: string[] = [];
+
+  // Info Block
+  if (data.info) {
+    let infoBlock = `# ${data.info.title}`;
+    if (data.info.version) {
+        infoBlock += ` (v${data.info.version})`;
+    }
+    if (data.info.description) {
+        infoBlock += `\n\n${data.info.description.trim()}`;
+    }
+    parts.push(infoBlock);
+  }
+
+  const endpoints: string[] = [];
+  // Endpoints
+  if (data.paths) {
+    for (const [path, pathItem] of Object.entries(data.paths)) {
+      if (!pathItem) continue;
+      
+      const validMethods = Object.keys(pathItem).filter(method => 
+        HTTP_METHODS.includes(method as any)
+      ) as (keyof typeof pathItem)[];
+
+      for (const method of validMethods) {
+        const operation = pathItem[method] as OpenAPIV3.OperationObject;
+        if (!operation || typeof operation !== 'object' || !('responses' in operation)) continue;
+        
+        endpoints.push(formatEndpoint(method, path, operation, data));
+      }
+    }
+  }
+  
+  if (endpoints.length > 0) {
+      parts.push("## Endpoints\n\n" + endpoints.join('\n---\n\n'));
+  }
+
+  const schemas: string[] = [];
+  // Schemas
+  if (data.components?.schemas) {
+    for (const [name, schemaRef] of Object.entries(data.components.schemas)) {
+        schemas.push(formatSchema(name, schemaRef, data));
+    }
+  }
+
+  if (schemas.length > 0) {
+      parts.push("## Schemas\n\n" + schemas.join('\n---\n\n'));
+  }
+  
+  return parts.join('\n\n---\n\n').trim();
+};
+```
+
 ## File: src/frontend/components/features/stats/StatsPanel.tsx
 ```typescript
 import React from 'react';
@@ -1585,39 +1579,6 @@ export default defineConfig({
     }
   }
 })
-```
-
-## File: src/backend/formatters/index.ts
-```typescript
-import { formatAsJson } from './json';
-import { formatAsXml } from './xml';
-import { formatAsConciseText } from './concise-text';
-import type { OutputFormat } from '../types';
-import { OpenAPIV3 } from 'openapi-types';
-import YAML from 'yaml';
-
-export interface Formatter {
-  format: (data: OpenAPIV3.Document) => string;
-}
-
-const formatAsYaml = (data: OpenAPIV3.Document): string => {
-  return YAML.stringify(data);
-};
-
-const formatters: Record<OutputFormat, Formatter> = {
-  json: { format: formatAsJson },
-  yaml: { format: formatAsYaml },
-  xml: { format: formatAsXml },
-  markdown: { format: formatAsConciseText },
-};
-
-export const getFormatter = (format: OutputFormat): Formatter => {
-  const formatter = formatters[format];
-  if (!formatter) {
-    throw new Error(`Unsupported output format: ${format}`);
-  }
-  return formatter;
-};
 ```
 
 ## File: src/backend/utils/fetcher.ts
@@ -2013,6 +1974,39 @@ export const condenseSpecAtom = atom(
         }
     }
 );
+```
+
+## File: src/backend/formatters/index.ts
+```typescript
+import { formatAsJson } from './json';
+import { formatAsXml } from './xml';
+import { formatAsConciseText } from './concise-text';
+import type { OutputFormat } from '../types';
+import { OpenAPIV3 } from 'openapi-types';
+import YAML from 'yaml';
+
+export interface Formatter {
+  format: (data: OpenAPIV3.Document) => string;
+}
+
+const formatAsYaml = (data: OpenAPIV3.Document): string => {
+  return YAML.stringify(data);
+};
+
+const formatters: Record<OutputFormat, Formatter> = {
+  json: { format: formatAsJson },
+  yaml: { format: formatAsYaml },
+  xml: { format: formatAsXml },
+  markdown: { format: formatAsConciseText },
+};
+
+export const getFormatter = (format: OutputFormat): Formatter => {
+  const formatter = formatters[format];
+  if (!formatter) {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+  return formatter;
+};
 ```
 
 ## File: src/frontend/client.ts
@@ -3085,14 +3079,13 @@ export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
     return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
   }
 
-  const compactSpecString = JSON.stringify(spec);
   const prettySpecString = JSON.stringify(spec, null, 2);
 
   const charCount = prettySpecString.length;
   const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count, as it varies by model.
-  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
+  // Rough approximation of token count.
+  // Using charCount (from pretty-printed string) for consistency with how formatted output stats are calculated.
+  const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
 
   const validMethods = new Set(HTTP_METHODS);
   const pathItems = spec.paths || {};

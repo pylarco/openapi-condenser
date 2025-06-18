@@ -174,15 +174,16 @@ export const getComponentNameFromRef = (ref: string): { type: string; name: stri
 
 /**
  * Removes all components (schemas, parameters, etc.) that are not referenced
- * in the remaining parts of the specification.
+ * in the remaining parts of the specification. This version uses a more efficient
+ * queue-based traversal to find all transitive dependencies.
  */
 export const removeUnusedComponents = (
   spec: OpenAPIV3.Document,
 ): OpenAPIV3.Document => {
   if (!spec.components) return spec;
 
-  // 1. Find all initial references from the spec roots that are kept.
-  const allRefs = new Set<string>();
+  // 1. Find all initial references from the spec roots.
+  const initialRefs = new Set<string>();
   const specRoots = [
     spec.paths,
     spec.tags,
@@ -195,26 +196,35 @@ export const removeUnusedComponents = (
 
   for (const root of specRoots) {
     if (root) {
-      findRefsRecursive(root, allRefs);
+      findRefsRecursive(root, initialRefs);
     }
   }
 
-  // 2. Transitively discover all dependencies within the components.
-  // We keep iterating until no new references are found in an iteration.
-  let previousSize;
-  do {
-    previousSize = allRefs.size;
-    allRefs.forEach(ref => {
-      const componentInfo = getComponentNameFromRef(ref);
-      if (componentInfo) {
-        const { type, name } = componentInfo;
-        const component = (spec.components as any)?.[type]?.[name];
-        if (component) {
-          findRefsRecursive(component, allRefs);
+  // 2. Use a queue-based approach (BFS) to transitively find all used components.
+  const allUsedRefs = new Set<string>(initialRefs);
+  const queue = Array.from(initialRefs);
+
+  while (queue.length > 0) {
+    const ref = queue.shift(); // Using shift is okay for typical spec sizes
+    if (!ref) continue;
+
+    const componentInfo = getComponentNameFromRef(ref);
+    if (componentInfo) {
+      const { type, name } = componentInfo;
+      const component = (spec.components as any)?.[type]?.[name];
+      if (component) {
+        const subRefs = new Set<string>();
+        findRefsRecursive(component, subRefs);
+        
+        for (const subRef of subRefs) {
+          if (!allUsedRefs.has(subRef)) {
+            allUsedRefs.add(subRef);
+            queue.push(subRef);
+          }
         }
       }
-    });
-  } while (allRefs.size > previousSize);
+    }
+  }
 
   // 3. Build a new components object with only the referenced items.
   const newComponents: OpenAPIV3.ComponentsObject = {};
@@ -224,7 +234,7 @@ export const removeUnusedComponents = (
       const newComponentGroup: Record<string, any> = {};
       for (const componentName in componentGroup) {
         const ref = `#/components/${componentType}/${componentName}`;
-        if (allRefs.has(ref)) {
+        if (allUsedRefs.has(ref)) {
           newComponentGroup[componentName] = componentGroup[componentName];
         }
       }
@@ -245,7 +255,8 @@ export const removeUnusedComponents = (
 };
 
 /**
- * Transform OpenAPI schema based on configuration
+ * Transform OpenAPI schema based on configuration. This version is optimized
+ * to modify objects in-place, reducing memory allocations.
  */
 export const transformSchema = (
   node: any,
@@ -271,36 +282,36 @@ export const transformSchema = (
   }
   
   if (Array.isArray(node)) {
-    return node
-      .map(item => transformSchema(item, transformOptions, currentDepth + 1))
-      .filter(Boolean);
+    // We must use .map() to handle cases where an item is replaced (e.g., by max depth truncation).
+    return node.map(item => transformSchema(item, transformOptions, currentDepth + 1));
   }
 
-  const result: { [key: string]: any } = { ...node };
+  // It's an object. Modify it in-place.
   
   // Remove examples if configured
-  if (transformOptions.removeExamples && 'example' in result) {
-    delete result.example;
+  if (transformOptions.removeExamples && 'example' in node) {
+    delete node.example;
   }
-  if (transformOptions.removeExamples && 'examples' in result) {
-    delete result.examples;
+  if (transformOptions.removeExamples && 'examples' in node) {
+    delete node.examples;
   }
   
   // Remove descriptions if configured
-  if (transformOptions.removeDescriptions && 'description' in result) {
-    delete result.description;
+  if (transformOptions.removeDescriptions && 'description' in node) {
+    delete node.description;
   }
 
   // Remove summaries if configured
-  if (transformOptions.removeSummaries && 'summary' in result) {
-    delete result.summary;
+  if (transformOptions.removeSummaries && 'summary' in node) {
+    delete node.summary;
   }
   
   // Recursively transform nested properties
-  for (const key in result) {
-    const prop = result[key];
+  for (const key in node) {
+    const prop = node[key];
     if (typeof prop === 'object' && prop !== null) {
-      result[key] = transformSchema(
+      // Re-assign because the recursive call might return a new object (e.g. from maxDepth).
+      node[key] = transformSchema(
         prop,
         transformOptions,
         currentDepth + 1,
@@ -308,7 +319,7 @@ export const transformSchema = (
     }
   }
   
-  return result;
+  return node;
 };
 
 /**
