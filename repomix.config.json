@@ -1,0 +1,42 @@
+{
+  "input": {
+    "maxFileSize": 52428800
+  },
+  "output": {
+    "filePath": "docs/repomix-output.md",
+    "style": "markdown",
+    "parsableStyle": false,
+    "fileSummary": false,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "compress": false,
+    "topFilesLength": 5,
+    "showLineNumbers": false,
+    "copyToClipboard": true,
+    "git": {
+      "sortByChanges": true,
+      "sortByChangesMaxCommits": 100
+    }
+  },
+  "include": [
+    //full repo
+    "src",
+    "index.html",
+    "tsconfig.json",
+    "package.json",
+    "vite.config.ts"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}

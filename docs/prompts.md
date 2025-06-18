@@ -180,3 +180,23 @@ fix bug
 2. the fullscreen should be triggered at scroll down of code output. not directly after processed.
 3. the condense button is hidden at bottom viewport cannot be scrolled while on long code output.
 4. the action button should active after data ready.
+
+--------------------
+
+full
+  "include": [
+    "src",
+    "index.html",
+    "tsconfig.json",
+    "package.json",
+    "vite.config.ts"
+  ],
+
+-------------------
+
+1. fullscreen should be real code editor fullscreen. also no overlapping scrollables
+2. bug: make the toggle clickable, and animated
+
+------------------
+
+fix test and linter

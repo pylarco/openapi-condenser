@@ -62,26 +62,38 @@ export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
 }
 
 export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
-  const timeline = useRef(gsap.timeline({ paused: true }));
+  const tl = useRef<gsap.core.Timeline>();
+  const isInitialMount = useRef(true);
 
+  // This effect runs once to create the timeline.
   useLayoutEffect(() => {
     if (!el.current) return;
     const knob = el.current.nextElementSibling?.nextElementSibling;
     const background = el.current.nextElementSibling;
     if (!knob || !background) return;
 
-    timeline.current.clear().to(background, {
-      backgroundColor: checked ? 'rgb(6 182 212)' : 'rgb(71 85 105)',
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }).to(knob, {
-      x: checked ? 16 : 0,
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }, '<');
-  }, []);
+    tl.current = gsap.timeline({ paused: true })
+      .to(background, { backgroundColor: 'rgb(6 182 212)', duration: 0.2, ease: 'power2.inOut' })
+      .to(knob, { x: 16, duration: 0.2, ease: 'power2.inOut' }, '<');
+      
+    return () => { tl.current?.kill() };
+  }, [el]);
 
+  // This effect controls the animation based on the `checked` state.
   useLayoutEffect(() => {
-    timeline.current.play();
+    if (tl.current) {
+      if (isInitialMount.current) {
+        // On first render, just set the state, don't animate
+        tl.current.progress(checked ? 1 : 0);
+        isInitialMount.current = false;
+      } else {
+        // On subsequent renders, animate
+        if (checked) {
+          tl.current.play();
+        } else {
+          tl.current.reverse();
+        }
+      }
+    }
   }, [checked]);
-} 
+}

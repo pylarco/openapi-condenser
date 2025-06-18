@@ -1,43 +1,8 @@
-This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
-
-# File Summary
-
-## Purpose
-This file contains a packed representation of the entire repository's contents.
-It is designed to be easily consumable by AI systems for analysis, code review,
-or other automated processes.
-
-## File Format
-The content is organized as follows:
-1. This summary section
-2. Repository information
-3. Directory structure
-4. Repository files (if enabled)
-5. Multiple file entries, each consisting of:
-  a. A header with the file path (## File: path/to/file)
-  b. The full contents of the file in a code block
-
-## Usage Guidelines
-- This file should be treated as read-only. Any changes should be made to the
-  original repository files, not this packed version.
-- When processing this file, use the file path to distinguish
-  between different files in the repository.
-- Be aware that this file may contain sensitive information. Handle it with
-  the same level of security as you would the original repository.
-
-## Notes
-- Some files may have been excluded based on .gitignore rules and Repomix's configuration
-- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: src, index.html, openapi-condenser.config.ts, package.json, tsconfig.json, vite.config.ts, test
-- Files matching these patterns are excluded: *.git *.cursor/
-- Files matching patterns in .gitignore are excluded
-- Files matching default ignore patterns are excluded
-- Files are sorted by Git change count (files with more changes are at the bottom)
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
 
 # Directory Structure
 ```
 index.html
-openapi-condenser.config.ts
 package.json
 src/backend/cli.ts
 src/backend/constants.ts
@@ -70,11 +35,6 @@ src/frontend/state/motion.reuse.tsx
 src/frontend/styles.css
 src/shared/constants.ts
 src/shared/types.ts
-test/e2e/server.test.ts
-test/e2e/transformer.test.ts
-test/test.util.ts
-test/unit/extractor.test.ts
-test/unit/transformer.test.ts
 tsconfig.json
 vite.config.ts
 ```
@@ -111,17 +71,6 @@ vite.config.ts
     <script type="module" src="/src/frontend/main.tsx"></script>
   </body>
 </html>
-```
-
-## File: src/backend/constants.ts
-```typescript
-export const contentTypeMappings: ReadonlyArray<[string, string]> = [
-    ['json', 'json'],
-    ['form-data', 'form-data'],
-    ['x-www-form-urlencoded', 'form-urlencoded'],
-    ['xml', 'xml'],
-    ['text/plain', 'text'],
-];
 ```
 
 ## File: src/frontend/components/ui/Section.tsx
@@ -230,60 +179,41 @@ export const useInputFocus = (el: React.RefObject<HTMLElement>) => {
 }
 
 export const useSwitchAnimation = (el: React.RefObject<HTMLInputElement>, checked: boolean) => {
-  const timeline = useRef(gsap.timeline({ paused: true }));
+  const tl = useRef<gsap.core.Timeline>();
+  const isInitialMount = useRef(true);
 
+  // This effect runs once to create the timeline.
   useLayoutEffect(() => {
     if (!el.current) return;
     const knob = el.current.nextElementSibling?.nextElementSibling;
     const background = el.current.nextElementSibling;
     if (!knob || !background) return;
 
-    timeline.current.clear().to(background, {
-      backgroundColor: checked ? 'rgb(6 182 212)' : 'rgb(71 85 105)',
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }).to(knob, {
-      x: checked ? 16 : 0,
-      duration: 0.2,
-      ease: 'power2.inOut'
-    }, '<');
-  }, []);
+    tl.current = gsap.timeline({ paused: true })
+      .to(background, { backgroundColor: 'rgb(6 182 212)', duration: 0.2, ease: 'power2.inOut' })
+      .to(knob, { x: 16, duration: 0.2, ease: 'power2.inOut' }, '<');
+      
+    return () => { tl.current?.kill() };
+  }, [el]);
 
+  // This effect controls the animation based on the `checked` state.
   useLayoutEffect(() => {
-    timeline.current.play();
+    if (tl.current) {
+      if (isInitialMount.current) {
+        // On first render, just set the state, don't animate
+        tl.current.progress(checked ? 1 : 0);
+        isInitialMount.current = false;
+      } else {
+        // On subsequent renders, animate
+        if (checked) {
+          tl.current.play();
+        } else {
+          tl.current.reverse();
+        }
+      }
+    }
   }, [checked]);
 }
-```
-
-## File: src/shared/constants.ts
-```typescript
-import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
-
-// --- Default Config ---
-export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
-  filter: {
-    paths: { include: [], exclude: [] },
-    tags: { include: [], exclude: [] },
-    methods: [],
-    includeDeprecated: false,
-  },
-  transform: {
-    removeExamples: false,
-    removeDescriptions: false,
-    removeSummaries: false,
-    includeServers: true,
-    includeInfo: true,
-    includeSchemas: true,
-    includeRequestBodies: true,
-    includeResponses: true,
-  },
-};
-
-export const HTTP_METHODS: HttpMethod[] = [
-  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
-];
-
-export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
 ```
 
 ## File: src/shared/types.ts
@@ -326,138 +256,19 @@ export interface SpecStats {
 }
 ```
 
-## File: test/test.util.ts
+## File: src/backend/constants.ts
 ```typescript
-export const sampleSpec = {
-    openapi: '3.0.0',
-    info: {
-      title: 'Sample API',
-      version: '1.0.0',
-      description: 'A sample API for testing.',
-    },
-    servers: [
-      {
-        url: 'https://api.example.com/v1',
-        description: 'Production server',
-      },
-    ],
-    tags: [
-      { name: 'users', description: 'User operations' },
-      { name: 'items', description: 'Item operations' },
-      { name: 'internal', description: 'Internal stuff' },
-    ],
-    paths: {
-      '/users': {
-        get: {
-          summary: 'Get all users',
-          tags: ['users'],
-          description: 'Returns a list of all users.',
-          responses: {
-            '200': {
-              description: 'A list of users.',
-              content: {
-                'application/json': {
-                  schema: {
-                    type: 'array',
-                    items: { $ref: '#/components/schemas/User' },
-                  },
-                  example: [{ id: '1', name: 'John Doe' }],
-                },
-              },
-            },
-          },
-        },
-      },
-      '/users/{userId}': {
-        get: {
-          summary: 'Get a user by ID',
-          tags: ['users'],
-          description: 'Returns a single user.',
-          parameters: [
-            { name: 'userId', in: 'path', required: true, schema: { type: 'string' } },
-          ],
-          responses: {
-            '200': {
-              description: 'A single user.',
-              content: {
-                'application/json': {
-                  schema: { $ref: '#/components/schemas/User' },
-                },
-              },
-            },
-          },
-        },
-      },
-      '/items': {
-        post: {
-          summary: 'Create an item',
-          tags: ['items'],
-          description: 'Creates a new item.',
-          requestBody: {
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Item' },
-              },
-            },
-          },
-          responses: {
-            '201': { description: 'Item created' },
-          },
-        },
-      },
-      '/internal/status': {
-        get: {
-          summary: 'Get internal status',
-          tags: ['internal'],
-          deprecated: true,
-          description: 'This is a deprecated endpoint.',
-          responses: {
-            '200': { description: 'OK' },
-          },
-        },
-      },
-    },
-    components: {
-      schemas: {
-        User: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'User ID', example: 'user-123' },
-            name: { type: 'string', description: 'User name', example: 'Jane Doe' },
-          },
-        },
-        Item: {
-          type: 'object',
-          properties: {
-            sku: { type: 'string' },
-            price: { type: 'number' },
-          },
-        },
-        UnusedSchema: {
-          type: 'object',
-          properties: {
-            foo: { type: 'string' },
-          },
-        },
-      },
-    },
-  };
-```
+export const contentTypeMappings: ReadonlyArray<[string, string]> = [
+    ['json', 'json'],
+    ['form-data', 'form-data'],
+    ['x-www-form-urlencoded', 'form-urlencoded'],
+    ['xml', 'xml'],
+    ['text/plain', 'text'],
+];
 
-## File: vite.config.ts
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
-})
+export const DEFAULT_CONFIG_PATH = './openapi-condenser.config.ts';
+export const TOKEN_CHAR_RATIO = 4;
+export const USER_AGENT = 'OpenAPI-Condenser/1.0';
 ```
 
 ## File: src/backend/formatters/concise-text.ts
@@ -1046,29 +857,6 @@ export const TextInput: React.FC<{ label: string; value: string[] | undefined; o
 });
 ```
 
-## File: src/frontend/constants.ts
-```typescript
-import { json } from '@codemirror/lang-json';
-import { yaml } from '@codemirror/lang-yaml';
-import { markdown } from '@codemirror/lang-markdown';
-import type { OutputFormat } from '../shared/types';
-
-// --- Input Panel ---
-export const INPUT_DEBOUNCE_DELAY = 300; // ms
-export const URL_FETCH_DEBOUNCE_DELAY = 500; // ms
-export const DEFAULT_SPEC_FILENAME = 'spec.json';
-export const DEFAULT_URL_FILENAME = 'spec.from.url';
-
-
-// --- Output Panel ---
-export const languageMap: { [K in OutputFormat]: () => any } = {
-  json: () => json(),
-  yaml: () => yaml(),
-  xml: () => markdown({}), // fallback for xml
-  markdown: () => markdown({}),
-};
-```
-
 ## File: src/frontend/styles.css
 ```css
 /* You can add any additional global styles here if needed */
@@ -1106,595 +894,59 @@ body {
 }
 ```
 
-## File: test/e2e/transformer.test.ts
+## File: src/shared/constants.ts
 ```typescript
-import { describe, it, expect } from 'bun:test';
-import { extractOpenAPI } from '../../src/backend/extractor';
-import type { ExtractorConfig, OpenAPIExtractorResult } from '../../src/backend/types';
+import type { FilterOptions, TransformOptions, HttpMethod, OutputFormat } from './types';
 
-const complexTestSpec = {
-  openapi: '3.0.0',
-  info: {
-    title: 'Complex Test API',
-    version: '1.0.0',
-  },
-  paths: {
-    '/users/{id}': {
-      get: {
-        summary: 'Get a user',
-        tags: ['Users'],
-        operationId: 'getUser',
-        parameters: [
-          { $ref: '#/components/parameters/UserId' }
-        ],
-        responses: {
-          '200': {
-            description: 'A user object',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/User' },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/posts/{id}': {
-      get: {
-        summary: 'Get a post',
-        tags: ['Posts'],
-        operationId: 'getPost',
-        responses: {
-          '200': {
-            description: 'A post object',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Post' },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/tags': {
-        post: {
-            summary: 'Create a tag',
-            tags: ['Tags'],
-            operationId: 'createTag',
-            requestBody: {
-                $ref: '#/components/requestBodies/TagBody'
-            },
-            responses: {
-                '201': {
-                    description: 'Tag created'
-                }
-            }
-        }
-    }
-  },
-  components: {
-    parameters: {
-        UserId: {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'string' }
-        }
-    },
-    requestBodies: {
-        TagBody: {
-            content: {
-                'application/json': {
-                    schema: { $ref: '#/components/schemas/Tag' }
-                }
-            }
-        }
-    },
-    schemas: {
-      User: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          profile: { $ref: '#/components/schemas/UserProfile' },
-        },
-      },
-      UserProfile: {
-        type: 'object',
-        properties: {
-          email: { type: 'string' },
-          avatar: { $ref: '#/components/schemas/Avatar' }
-        },
-      },
-      Avatar: {
-        type: 'object',
-        properties: {
-          url: { type: 'string' },
-        }
-      },
-      Post: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          author: { $ref: '#/components/schemas/User' },
-        },
-      },
-      Tag: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' }
-        }
-      }
-    },
-  },
-};
+// --- App Config ---
+export const API_PORT = 3000;
+export const API_HOST = 'localhost';
+export const API_PREFIX = '/api';
+export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`;
 
-describe('Complex Transformer and Stats Validation', () => {
-  it('should correctly filter paths, remove unused components transitively, and calculate accurate stats', async () => {
-    const config: ExtractorConfig = {
-      source: {
-        type: 'memory',
-        path: 'spec.json',
-        content: JSON.stringify(complexTestSpec),
-      },
-      filter: {
-        paths: {
-          exclude: ['/posts/{id}'],
-        },
-      },
-      transform: {},
-      output: {
-        format: 'json',
-      },
-    };
+// --- OpenAPI Semantics ---
+export const HTTP_METHODS: HttpMethod[] = [
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'
+];
+export const OUTPUT_FORMATS: OutputFormat[] = ['json', 'yaml', 'xml', 'markdown'];
+export const DEFAULT_OUTPUT_FORMAT: OutputFormat = 'markdown';
 
-    const result: OpenAPIExtractorResult = await extractOpenAPI(config);
-
-    expect(result.success).toBe(true);
-    if (!result.success || !result.stats) return;
-
-    const transformedSpec = JSON.parse(result.data as string);
-    
-    // 1. Validate Stats
-    expect(result.stats.before.operations).toBe(3);
-    expect(result.stats.before.schemas).toBe(5);
-    expect(result.stats.after.operations).toBe(2); // get user, create tag
-    expect(result.stats.after.schemas).toBe(4);   // User, UserProfile, Avatar, Tag (Post should be removed)
-    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
-    expect(result.stats.after.tokenCount).toBeLessThan(result.stats.before.tokenCount);
-
-    // 2. Validate Path Filtering
-    expect(transformedSpec.paths['/users/{id}']).toBeDefined();
-    expect(transformedSpec.paths['/posts/{id}']).toBeUndefined();
-    expect(transformedSpec.paths['/tags']).toBeDefined();
-
-    // 3. Validate Component Removal
-    const components = transformedSpec.components;
-    // Kept because /users/{id} is kept
-    expect(components.schemas.User).toBeDefined();
-    // Kept because User needs it (transitive)
-    expect(components.schemas.UserProfile).toBeDefined();
-    // Kept because UserProfile needs it (transitive)
-    expect(components.schemas.Avatar).toBeDefined();
-    // Kept because /tags is kept
-    expect(components.schemas.Tag).toBeDefined();
-     // Kept because /users/{id} needs it
-    expect(components.parameters.UserId).toBeDefined();
-    // Kept because /tags needs it
-    expect(components.requestBodies.TagBody).toBeDefined();
-
-    // Removed because /posts/{id} was removed and nothing else uses it
-    expect(components.schemas.Post).toBeUndefined();
-  });
-
-  it('should handle a combination of path, tag, and method filters plus transformations', async () => {
-    const multiFilterSpec = {
-      openapi: '3.0.0',
-      info: { title: 'Multi-filter Test', version: '1.0' },
-      paths: {
-        '/products': {
-          get: { 
-            tags: ['products', 'search'],
-            summary: 'Get all products',
-            description: 'This should be removed.',
-            responses: { '200': { description: 'OK' } }
-          },
-          post: {
-            tags: ['products'],
-            summary: 'Create a product',
-            responses: { '201': { description: 'Created' } }
-          }
-        },
-        '/inventory': {
-          get: {
-            tags: ['inventory'],
-            summary: 'Get inventory',
-            responses: { '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/Inventory' }, example: { 'stock': 100 } } } } }
-          }
-        },
-        '/users': {
-          get: {
-            tags: ['users'],
-            summary: 'Get users',
-            responses: { '200': { description: 'OK' } }
-          }
-        }
-      },
-      components: {
-        schemas: {
-          Inventory: { type: 'object', properties: { stock: { type: 'integer' } } }
-        }
-      }
-    };
-
-    const config: ExtractorConfig = {
-      source: {
-        type: 'memory',
-        path: 'spec.json',
-        content: JSON.stringify(multiFilterSpec)
-      },
-      filter: {
-        paths: { exclude: ['/users'] }, // Exclude /users
-        tags: { include: ['products', 'inventory'] }, // Only include endpoints with these tags
-        methods: ['get'] // Only allow GET methods
-      },
-      transform: {
-        removeDescriptions: true,
-        removeExamples: true
-      },
-      output: { format: 'json' }
-    };
-
-    const result = await extractOpenAPI(config);
-    expect(result.success).toBe(true);
-    if(!result.success || !result.stats) return;
-
-    const spec = JSON.parse(result.data as string);
-
-    // 1. Path and method assertions
-    expect(spec.paths['/products']).toBeDefined();
-    expect(spec.paths['/products'].get).toBeDefined(); // Kept: matches tags and method
-    expect(spec.paths['/products'].post).toBeUndefined(); // Removed: method is not 'get'
-    
-    expect(spec.paths['/inventory']).toBeDefined();
-    expect(spec.paths['/inventory'].get).toBeDefined(); // Kept: matches tags and method
-    
-    expect(spec.paths['/users']).toBeUndefined(); // Removed: excluded by path filter
-
-    // 2. Transformation assertions
-    expect(spec.paths['/products'].get.description).toBeUndefined();
-    expect(spec.paths['/inventory'].get.responses['200'].content['application/json'].example).toBeUndefined();
-
-    // 3. Component assertions
-    expect(spec.components.schemas.Inventory).toBeDefined(); // Kept because /inventory is kept
-
-    // 4. Stats assertions
-    expect(result.stats.before.operations).toBe(4);
-    expect(result.stats.after.operations).toBe(2); // /products -> get, /inventory -> get
-    expect(result.stats.after.charCount).toBeLessThan(result.stats.before.charCount);
-  });
-});
-```
-
-## File: test/unit/transformer.test.ts
-```typescript
-import { describe, it, expect } from 'bun:test';
-import { getComponentNameFromRef, removeUnusedComponents, findRefsRecursive } from '../../src/backend/transformer';
-import { OpenAPIV3 } from 'openapi-types';
-
-describe('transformer.ts unit tests', () => {
-    describe('getComponentNameFromRef', () => {
-        it('should correctly parse a standard component ref', () => {
-            const result = getComponentNameFromRef('#/components/schemas/MySchema');
-            expect(result).toEqual({ type: 'schemas', name: 'MySchema' });
-        });
-
-        it('should correctly parse a ref with a multi-part name', () => {
-            const result = getComponentNameFromRef('#/components/schemas/Common/ErrorResponse');
-            expect(result).toEqual({ type: 'schemas', name: 'Common/ErrorResponse' });
-        });
-
-        it('should return null for refs not pointing to components', () => {
-            const result = getComponentNameFromRef('#/paths/~1users/get');
-            expect(result).toBeNull();
-        });
-
-        it('should return null for malformed component refs', () => {
-            expect(getComponentNameFromRef('#/components/schemas/')).toBeNull();
-            expect(getComponentNameFromRef('#/components/')).toBeNull();
-            expect(getComponentNameFromRef('invalid-ref')).toBeNull();
-        });
-    });
-
-    describe('findRefsRecursive', () => {
-        it('should find all refs in a complex object', () => {
-            const obj = {
-                a: { $ref: '#/components/schemas/A' },
-                b: [{ $ref: '#/components/schemas/B' }],
-                c: { nested: { $ref: '#/components/schemas/C' } },
-                d: 'not a ref',
-                e: { $ref: 123 } // invalid ref type
-            };
-            const refs = new Set<string>();
-            findRefsRecursive(obj, refs);
-            expect(refs).toEqual(new Set(['#/components/schemas/A', '#/components/schemas/B', '#/components/schemas/C']));
-        });
-    });
-
-    describe('removeUnusedComponents', () => {
-        const baseSpec = (): OpenAPIV3.Document => ({
-            openapi: '3.0.0',
-            info: { title: 'Test Spec', version: '1.0.0' },
-            paths: {
-                '/users': {
-                    get: {
-                        responses: { '200': { description: 'ok', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
-                    }
-                }
-            },
-            components: {
-                schemas: {
-                    User: { type: 'object', properties: { profile: { $ref: '#/components/schemas/Profile' } } },
-                    Profile: { type: 'object', properties: { avatar: { $ref: '#/components/schemas/Avatar' } } },
-                    Avatar: { type: 'object' },
-                    UnusedSchema: { type: 'object' },
-                    OrphanedDependency: { $ref: '#/components/schemas/UnusedSchema' }
-                },
-                parameters: {
-                    UnusedParam: { name: 'limit', in: 'query' }
-                }
-            }
-        });
-        
-        it('should remove all unused components, including transitive ones', () => {
-            const spec = baseSpec();
-            const result = removeUnusedComponents(spec);
-
-            // Kept schemas
-            expect(result.components?.schemas?.User).toBeDefined();
-            expect(result.components?.schemas?.Profile).toBeDefined();
-            expect(result.components?.schemas?.Avatar).toBeDefined();
-
-            // Removed schemas
-            expect(result.components?.schemas?.UnusedSchema).toBeUndefined();
-            expect(result.components?.schemas?.OrphanedDependency).toBeUndefined();
-
-            // Removed component groups
-            expect(result.components?.parameters).toBeUndefined();
-        });
-
-        it('should remove the entire components object if nothing is left', () => {
-            const spec: OpenAPIV3.Document = {
-                openapi: '3.0.0',
-                info: { title: 'Test Spec', version: '1.0.0' },
-                paths: { '/health': { get: { responses: { '200': { description: 'OK' } } } } },
-                components: { schemas: { Unused: { type: 'object' } } }
-            };
-            const result = removeUnusedComponents(spec);
-            expect(result.components).toBeUndefined();
-        });
-
-        it('should not modify a spec with no components object', () => {
-            const spec: OpenAPIV3.Document = { 
-                openapi: '3.0.0',
-                info: { title: 'Test Spec', version: '1.0.0' },
-                paths: {} 
-            };
-            const result = removeUnusedComponents(JSON.parse(JSON.stringify(spec)));
-            expect(result).toEqual(spec);
-        });
-    });
-});
-```
-
-## File: openapi-condenser.config.ts
-```typescript
-import type { ExtractorConfig } from './src/backend/types';
-
-const config: ExtractorConfig = {
-  source: {
-    type: 'local',
-    path: './openapi.json', // Path to local file or remote URL
-  },
-  output: {
-    format: 'markdown', // 'json', 'yaml', 'xml', or 'markdown'
-    destination: './output', // Output directory or file
-  },
+// --- Default Extractor Config ---
+export const defaultConfig: { filter: FilterOptions, transform: TransformOptions } = {
   filter: {
-    paths: {
-      // e.g., include: ['/users/**', '/pets/**'],
-      // e.g., exclude: ['/users/{userId}/posts']
-    }, // Filter by paths using glob patterns
-    tags: {
-      // e.g., include: ['user', 'pet*'],
-      // e.g., exclude: ['internal']
-    }, // Filter by tags using glob patterns
-    methods: undefined, // Filter by HTTP methods
-    includeDeprecated: false, // Whether to include deprecated endpoints
+    paths: { include: [], exclude: [] },
+    tags: { include: [], exclude: [] },
+    methods: [],
+    includeDeprecated: false,
   },
   transform: {
-    maxDepth: Infinity, // Maximum depth for schema extraction
-    removeExamples: false, // Whether to remove examples
-    removeDescriptions: false, // Whether to remove descriptions
-    includeServers: true, // Include server information
-    includeInfo: true, // Include API info (title, version, etc.)
-  },
-  validation: {
-    strict: true, // Enforce strict validation
-    ignoreErrors: [], // Error types to ignore
+    removeExamples: false,
+    removeDescriptions: false,
+    removeSummaries: false,
+    includeServers: true,
+    includeInfo: true,
+    includeSchemas: true,
+    includeRequestBodies: true,
+    includeResponses: true,
   },
 };
-
-export default config;
 ```
 
-## File: src/backend/cli.ts
+## File: vite.config.ts
 ```typescript
-#!/usr/bin/env bun
-import { parse } from 'cmd-ts';
-import { command, option, string, optional, flag } from 'cmd-ts';
-import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
-import type { ExtractorConfig, OutputFormat } from './types';
-import { OUTPUT_FORMATS } from '../shared/constants';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { API_BASE_URL, API_PREFIX } from './src/shared/constants'
 
-// Define CLI command
-const cmd = command({
-  name: 'openapi-condenser',
-  description: 'Extract and transform OpenAPI specifications',
-  args: {
-    config: option({
-      type: optional(string),
-      long: 'config',
-      short: 'c',
-      description: 'Path to configuration file',
-    }),
-    source: option({
-      type: optional(string),
-      long: 'source',
-      short: 's',
-      description: 'Source file path or URL',
-    }),
-    sourceType: option({
-      type: optional(string),
-      long: 'source-type',
-      description: 'Source type (local or remote)',
-    }),
-    format: option({
-      type: optional(string),
-      long: 'format',
-      short: 'f',
-      description: `Output format (${OUTPUT_FORMATS.join(', ')})`,
-    }),
-    outputPath: option({
-      type: optional(string),
-      long: 'output',
-      short: 'o',
-      description: 'Output file path',
-    }),
-    includePaths: option({
-      type: optional(string),
-      long: 'include-paths',
-      description: 'Include paths by glob patterns (comma-separated)',
-    }),
-    excludePaths: option({
-      type: optional(string),
-      long: 'exclude-paths',
-      description: 'Exclude paths by glob patterns (comma-separated)',
-    }),
-    includeTags: option({
-      type: optional(string),
-      long: 'include-tags',
-      description: 'Include endpoints by tag glob patterns (comma-separated)',
-    }),
-    excludeTags: option({
-      type: optional(string),
-      long: 'exclude-tags',
-      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
-    }),
-    methods: option({
-      type: optional(string),
-      long: 'methods',
-      description: 'Filter by HTTP methods (comma-separated)',
-    }),
-    includeDeprecated: flag({
-      long: 'include-deprecated',
-      description: 'Include deprecated endpoints',
-    }),
-    excludeSchemas: flag({
-      long: 'exclude-schemas',
-      description: 'Exclude component schemas from the output',
-    }),
-    excludeRequestBodies: flag({
-      long: 'exclude-request-bodies',
-      description: 'Exclude request bodies from the output',
-    }),
-    excludeResponses: flag({
-      long: 'exclude-responses',
-      description: 'Exclude responses from the output',
-    }),
-    verbose: flag({
-      long: 'verbose',
-      short: 'v',
-      description: 'Show verbose output',
-    }),
-  },
-  handler: async (args) => {
-    try {
-      // Load configuration
-      const configPath = args.config || './openapi-condenser.config.ts';
-      let config: ExtractorConfig;
-      
-      try {
-        config = await loadConfig(configPath);
-      } catch (error) {
-        if (args.source) {
-          const format = args.format || 'json';
-          if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
-            console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
-            process.exit(1);
-          }
-          // Create minimal config if no config file but source is provided
-          config = {
-            source: {
-              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
-              path: args.source
-            },
-            output: {
-              format: format as OutputFormat,
-            },
-          };
-        } else {
-          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-          process.exit(1);
-        }
-      }
-      
-      // Merge command line args with config
-      const mergedConfig = mergeWithCommandLineArgs(config, args);
-      
-      if (args.verbose) {
-        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
-      }
-      
-      // Run extraction
-      const result = await extractOpenAPI(mergedConfig);
-      
-      if (!result.success) {
-        if (result.errors) {
-          console.error('Errors:', result.errors.join('\n'));
-        }
-        process.exit(1);
-      }
-      
-      if (!mergedConfig.output.destination) {
-        // Output to stdout if no destination specified
-        console.log(result.data);
-      } else if (args.verbose) {
-        console.log(`Output written to: ${mergedConfig.output.destination}`);
-      }
-      
-      if (result.warnings && result.warnings.length > 0) {
-        console.warn('Warnings:', result.warnings.join('\n'));
-      }
-    } catch (error) {
-      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      [API_PREFIX]: API_BASE_URL
     }
-  },
-});
-
-// Run the command
-await parse(cmd, process.argv.slice(2));
-```
-
-## File: src/frontend/client.ts
-```typescript
-import { edenTreaty } from '@elysiajs/eden';
-import type { App } from '../backend/server';
-
-// Use with the specific older version
-export const client = edenTreaty<App>('http://localhost:3000');
+  }
+})
 ```
 
 ## File: src/frontend/components/features/ActionPanel.tsx
@@ -1769,21 +1021,18 @@ export const OutputPanel: React.FC<{}> = () => {
     }
   }, [copyStatus]);
 
-  // Setup scroll listener for fullscreen mode
+  // Handle body scroll when entering/exiting fullscreen
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || isFullScreen) return;
-
-    const handleScroll = () => {
-      // If user starts scrolling and we have lots of content, go fullscreen
-      if (container.scrollTop > 20 && output.split('\n').length > 30) {
-        setIsFullScreen(true);
-      }
+    if (isFullScreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
     };
-    
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [output, isFullScreen]);
+  }, [isFullScreen]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(output);
@@ -1885,6 +1134,199 @@ export const Switch: React.FC<{ label: string; checked: boolean; onChange: (chec
         </label>
     )
 });
+```
+
+## File: src/frontend/constants.ts
+```typescript
+import { json } from '@codemirror/lang-json';
+import { yaml } from '@codemirror/lang-yaml';
+import { markdown } from '@codemirror/lang-markdown';
+import type { OutputFormat } from '../shared/types';
+
+// --- App Info ---
+export const APP_TITLE = 'OpenAPI Condenser';
+export const APP_SUBTITLE = 'Pack your OpenAPI into AI-friendly formats';
+export const NAV_LINKS = {
+    SDK: '/sdk',
+    API: '/swagger',
+    GITHUB: 'https://github.com/repomix/openapi-condenser',
+    SPONSOR: 'https://github.com/sponsors/repomix',
+};
+
+// --- Input Panel ---
+export const INPUT_DEBOUNCE_DELAY = 300; // ms
+export const URL_FETCH_DEBOUNCE_DELAY = 500; // ms
+export const DEFAULT_SPEC_FILENAME = 'spec.json';
+export const DEFAULT_URL_FILENAME = 'spec.from.url';
+
+
+// --- Output Panel ---
+export const languageMap: { [K in OutputFormat]: () => any } = {
+  json: () => json(),
+  yaml: () => yaml(),
+  xml: () => markdown({}), // fallback for xml
+  markdown: () => markdown({}),
+};
+```
+
+## File: src/backend/cli.ts
+```typescript
+#!/usr/bin/env bun
+import { parse } from 'cmd-ts';
+import { command, option, string, optional, flag } from 'cmd-ts';
+import { loadConfig, mergeWithCommandLineArgs, extractOpenAPI } from './extractor';
+import type { ExtractorConfig, OutputFormat } from './types';
+import { DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH } from './constants';
+
+// Define CLI command
+const cmd = command({
+  name: 'openapi-condenser',
+  description: 'Extract and transform OpenAPI specifications',
+  args: {
+    config: option({
+      type: optional(string),
+      long: 'config',
+      short: 'c',
+      description: 'Path to configuration file',
+    }),
+    source: option({
+      type: optional(string),
+      long: 'source',
+      short: 's',
+      description: 'Source file path or URL',
+    }),
+    sourceType: option({
+      type: optional(string),
+      long: 'source-type',
+      description: 'Source type (local or remote)',
+    }),
+    format: option({
+      type: optional(string),
+      long: 'format',
+      short: 'f',
+      description: `Output format (${OUTPUT_FORMATS.join(', ')})`,
+    }),
+    outputPath: option({
+      type: optional(string),
+      long: 'output',
+      short: 'o',
+      description: 'Output file path',
+    }),
+    includePaths: option({
+      type: optional(string),
+      long: 'include-paths',
+      description: 'Include paths by glob patterns (comma-separated)',
+    }),
+    excludePaths: option({
+      type: optional(string),
+      long: 'exclude-paths',
+      description: 'Exclude paths by glob patterns (comma-separated)',
+    }),
+    includeTags: option({
+      type: optional(string),
+      long: 'include-tags',
+      description: 'Include endpoints by tag glob patterns (comma-separated)',
+    }),
+    excludeTags: option({
+      type: optional(string),
+      long: 'exclude-tags',
+      description: 'Exclude endpoints by tag glob patterns (comma-separated)',
+    }),
+    methods: option({
+      type: optional(string),
+      long: 'methods',
+      description: 'Filter by HTTP methods (comma-separated)',
+    }),
+    includeDeprecated: flag({
+      long: 'include-deprecated',
+      description: 'Include deprecated endpoints',
+    }),
+    excludeSchemas: flag({
+      long: 'exclude-schemas',
+      description: 'Exclude component schemas from the output',
+    }),
+    excludeRequestBodies: flag({
+      long: 'exclude-request-bodies',
+      description: 'Exclude request bodies from the output',
+    }),
+    excludeResponses: flag({
+      long: 'exclude-responses',
+      description: 'Exclude responses from the output',
+    }),
+    verbose: flag({
+      long: 'verbose',
+      short: 'v',
+      description: 'Show verbose output',
+    }),
+  },
+  handler: async (args) => {
+    try {
+      // Load configuration
+      const configPath = args.config || DEFAULT_CONFIG_PATH;
+      let config: ExtractorConfig;
+      
+      try {
+        config = await loadConfig(configPath);
+      } catch (error) {
+        if (args.source) {
+          const format = args.format || DEFAULT_OUTPUT_FORMAT;
+          if (!OUTPUT_FORMATS.includes(format as OutputFormat)) {
+            console.error(`Error: Invalid format '${format}'. Must be one of ${OUTPUT_FORMATS.join(', ')}.`);
+            process.exit(1);
+          }
+          // Create minimal config if no config file but source is provided
+          config = {
+            source: {
+              type: (args.sourceType === 'remote' ? 'remote' : 'local') as 'local' | 'remote',
+              path: args.source
+            },
+            output: {
+              format: format as OutputFormat,
+            },
+          };
+        } else {
+          console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
+      }
+      
+      // Merge command line args with config
+      const mergedConfig = mergeWithCommandLineArgs(config, args);
+      
+      if (args.verbose) {
+        console.log('Using configuration:', JSON.stringify(mergedConfig, null, 2));
+      }
+      
+      // Run extraction
+      const result = await extractOpenAPI(mergedConfig);
+      
+      if (!result.success) {
+        if (result.errors) {
+          console.error('Errors:', result.errors.join('\n'));
+        }
+        process.exit(1);
+      }
+      
+      if (!mergedConfig.output.destination) {
+        // Output to stdout if no destination specified
+        console.log(result.data);
+      } else if (args.verbose) {
+        console.log(`Output written to: ${mergedConfig.output.destination}`);
+      }
+      
+      if (result.warnings && result.warnings.length > 0) {
+        console.warn('Warnings:', result.warnings.join('\n'));
+      }
+    } catch (error) {
+      console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  },
+});
+
+// Run the command
+await parse(cmd, process.argv.slice(2));
 ```
 
 ## File: src/backend/formatters/index.ts
@@ -1996,6 +1438,16 @@ export const parseContent = (
     );
   }
 };
+```
+
+## File: src/frontend/client.ts
+```typescript
+import { edenTreaty } from '@elysiajs/eden';
+import type { App } from '../backend/server';
+import { API_BASE_URL } from '../shared/constants';
+
+// Use with the specific older version
+export const client = edenTreaty<App>(API_BASE_URL);
 ```
 
 ## File: src/frontend/components/features/config/ConfigPanel.tsx
@@ -2122,13 +1574,13 @@ import { atom } from 'jotai';
 import { client } from '../client';
 import type { OutputFormat, SpecStats } from '../../shared/types';
 import { DEFAULT_SPEC_FILENAME } from '../constants';
-import { defaultConfig } from '../../shared/constants';
+import { defaultConfig, DEFAULT_OUTPUT_FORMAT } from '../../shared/constants';
 
 // --- Base State Atoms ---
 export const specContentAtom = atom<string>('');
 export const fileNameAtom = atom<string>(DEFAULT_SPEC_FILENAME);
 export const configAtom = atom(defaultConfig);
-export const outputFormatAtom = atom<OutputFormat>('markdown');
+export const outputFormatAtom = atom<OutputFormat>(DEFAULT_OUTPUT_FORMAT);
 
 // --- Derived/Async State Atoms ---
 export const outputAtom = atom<string>('');
@@ -2214,367 +1666,6 @@ export const condenseSpecAtom = atom(
         }
     }
 );
-```
-
-## File: test/unit/extractor.test.ts
-```typescript
-import { describe, it, expect } from 'bun:test';
-import { calculateSpecStats } from '../../src/backend/extractor';
-import { OpenAPIV3 } from 'openapi-types';
-
-describe('extractor.ts unit tests', () => {
-    describe('calculateSpecStats', () => {
-        it('should return zero for an empty or invalid spec', () => {
-            const spec = null;
-            expect(calculateSpecStats(spec as unknown as OpenAPIV3.Document)).toEqual({ paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 });
-            const emptyStats = calculateSpecStats({} as OpenAPIV3.Document);
-            expect(emptyStats.paths).toBe(0);
-            expect(emptyStats.operations).toBe(0);
-            expect(emptyStats.schemas).toBe(0);
-            expect(emptyStats.charCount).toBe(2); // {}
-        });
-
-        it('should correctly count paths, operations, and schemas', () => {
-            const spec: OpenAPIV3.Document = {
-                openapi: '3.0.0',
-                info: { title: 'test', version: '1.0'},
-                paths: {
-                    '/users': {
-                        get: { summary: 'Get users', responses: { '200': { description: 'OK' } } },
-                        post: { summary: 'Create user', responses: { '200': { description: 'OK' } } }
-                    },
-                    '/users/{id}': {
-                        get: { summary: 'Get user by id', responses: { '200': { description: 'OK' } } },
-                        put: { summary: 'Update user', responses: { '200': { description: 'OK' } } },
-                        delete: { summary: 'Delete user', responses: { '200': { description: 'OK' } } },
-                        // This should not be counted as an operation
-                        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }]
-                    },
-                    '/health': {
-                        get: { summary: 'Health check', responses: { '200': { description: 'OK' } } }
-                    }
-                },
-                components: {
-                    schemas: {
-                        User: { type: 'object' },
-                        Error: { type: 'object' }
-                    }
-                }
-            };
-            const stats = calculateSpecStats(spec);
-            expect(stats.paths).toBe(3);
-            expect(stats.operations).toBe(6);
-            expect(stats.schemas).toBe(2);
-            expect(stats.charCount).toBeGreaterThan(100);
-            expect(stats.lineCount).toBeGreaterThan(10);
-            expect(stats.tokenCount).toBeGreaterThan(25);
-        });
-
-        it('should handle paths with no valid methods', () => {
-            const usersPath: OpenAPIV3.PathItemObject = {
-                parameters: [],
-            };
-            Object.assign(usersPath, { 'x-custom-property': 'value' });
-
-            const spec: OpenAPIV3.Document = {
-                openapi: '3.0.0',
-                info: { title: 'test', version: '1.0'},
-                paths: {
-                    '/users': usersPath
-                },
-                components: {}
-            };
-            const stats = calculateSpecStats(spec);
-            expect(stats.paths).toBe(1);
-            expect(stats.operations).toBe(0);
-            expect(stats.schemas).toBe(0);
-        });
-    });
-});
-```
-
-## File: test/e2e/server.test.ts
-```typescript
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { treaty } from '@elysiajs/eden';
-import YAML from 'yaml';
-import { app } from '../../src/backend/server';
-import type { App } from '../../src/backend/server';
-import { sampleSpec } from '../test.util';
-
-// Using a real public spec for fetch tests
-const publicSpecUrl = 'https://petstore3.swagger.io/api/v3/openapi.json';
-const nonExistentUrl = 'https://example.com/non-existent-spec.json';
-
-describe('E2E API Tests', () => {
-  let server: ReturnType<typeof app.listen>;
-  let api: ReturnType<typeof treaty<App>>;
-
-  beforeAll(() => {
-    // Start server on a random available port
-    server = app.listen(0);
-    const port = server.server?.port;
-    if (!port) {
-        throw new Error('Server port not available');
-    }
-    api = treaty<App>(`http://localhost:${port}`);
-  });
-
-  afterAll(() => {
-    server.stop(true);
-  });
-
-  describe('/api/fetch-spec', () => {
-    it('should fetch a valid remote OpenAPI spec', async () => {
-      const { data, error, status } = await api['api']['fetch-spec'].get({
-        query: { url: publicSpecUrl },
-      });
-
-      expect(status).toBe(200);
-      expect(error).toBeNull();
-      expect(data?.content).toBeString();
-      expect(() => JSON.parse(data!.content)).not.toThrow();
-      const parsed = JSON.parse(data!.content);
-      expect(parsed.openapi).toStartWith('3.');
-    }, 10000);
-
-    it('should return 400 for a missing URL parameter', async () => {
-        // @ts-expect-error - testing invalid input
-        const { data, error, status } = await api['api']['fetch-spec'].get({ query: {} });
-        expect(status).toBe(400);
-        if (error?.value && 'error' in error.value) {
-            expect(error.value.error).toBe('URL parameter is required');
-        } else {
-            throw new Error('Unexpected error response format');
-        }
-    });
-
-    it('should return 400 for an invalid URL format', async () => {
-        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'not-a-url' } });
-        expect(status).toBe(400);
-        if (error?.value && 'error' in error.value) {
-            expect(error.value.error).toInclude('Invalid URL');
-        } else {
-            throw new Error('Unexpected error response format');
-        }
-    });
-    
-    it('should return 403 when trying to fetch from a private network address (SSRF protection)', async () => {
-        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: 'http://127.0.0.1/spec.json' } });
-        expect(status).toBe(403);
-        if (error?.value && 'error' in error.value) {
-            expect(error.value.error).toBe('Fetching specs from private or local network addresses is forbidden.');
-        } else {
-            throw new Error('Unexpected error response format');
-        }
-    });
-
-    it('should handle non-existent remote files gracefully', async () => {
-        const { error, status } = await api['api']['fetch-spec'].get({ query: { url: nonExistentUrl } });
-        expect(status).toBe(404);
-        if (error?.value && 'error' in error.value) {
-            expect(error.value.error).toInclude('Failed to fetch spec');
-        } else {
-            throw new Error('Unexpected error response format');
-        }
-    });
-  });
-
-  describe('/api/condense', () => {
-    it('should condense a spec to YAML format', async () => {
-      const { data, error, status } = await api.api.condense.post({
-        source: {
-          content: JSON.stringify(sampleSpec),
-          path: 'spec.json',
-        },
-        output: { format: 'yaml' },
-      });
-
-      expect(status).toBe(200);
-      expect(error).toBeNull();
-      expect(data?.success).toBe(true);
-      expect(data?.data).toBeString();
-
-      // Check if the output is valid YAML
-      let parsedYaml: any;
-      expect(() => parsedYaml = YAML.parse(data!.data)).not.toThrow();
-      
-      if(parsedYaml) {
-        expect(parsedYaml.openapi).toBe('3.0.0');
-        expect(parsedYaml.info.title).toBe('Sample API');
-      } else {
-        throw new Error('parsedYaml should not be undefined');
-      }
-    });
-    
-    it('should condense a spec to Markdown format', async () => {
-        const { data, error, status } = await api.api.condense.post({
-            source: {
-              content: JSON.stringify(sampleSpec),
-              path: 'spec.json',
-            },
-            output: { format: 'markdown' },
-        });
-
-        expect(status).toBe(200);
-        expect(error).toBeNull();
-        expect(data?.success).toBe(true);
-        expect(data?.data).toBeString();
-        expect(data?.data).toStartWith('# Sample API');
-        expect(data?.data).toInclude('## Endpoints');
-        expect(data?.data).toInclude('### `GET` /users');
-    });
-
-    it('should filter paths based on include glob pattern', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            filter: {
-                paths: { include: ['/users'] },
-            },
-        });
-        
-        expect(data).toBeDefined();
-        expect(data?.stats).toBeDefined();
-        if (!data || !data.stats) throw new Error("Data or stats missing");
-        
-        const result = JSON.parse(data.data);
-        expect(Object.keys(result.paths)).toEqual(['/users']);
-        expect(result.paths['/users/{userId}']).toBeUndefined();
-        // Check stats
-        expect(data.stats.before.paths).toBe(4);
-        expect(data.stats.after.paths).toBe(1);
-        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
-    });
-    
-    it('should filter paths based on exclude glob pattern', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            filter: {
-                paths: { exclude: ['/internal/**'] },
-            },
-        });
-        
-        expect(data).toBeDefined();
-        expect(data?.stats).toBeDefined();
-        if (!data || !data.stats) throw new Error("Data or stats missing");
-
-        const result = JSON.parse(data.data);
-        expect(Object.keys(result.paths)).not.toInclude('/internal/status');
-        expect(Object.keys(result.paths)).toHaveLength(3);
-        // Check stats
-        expect(data.stats.before.paths).toBe(4);
-        expect(data.stats.after.paths).toBe(3);
-        expect(data.stats.after.charCount).toBeLessThan(data.stats.before.charCount);
-    });
-
-    it('should filter by tags', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            filter: {
-                tags: { include: ['users'] },
-            },
-        });
-        
-        expect(data).toBeDefined();
-        if (!data) throw new Error("Data missing");
-
-        const result = JSON.parse(data.data);
-        expect(Object.keys(result.paths)).toEqual(['/users', '/users/{userId}']);
-        expect(data.stats?.after.operations).toBe(2);
-    });
-
-    it('should exclude deprecated endpoints by default', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-        });
-        
-        expect(data).toBeDefined();
-        if (!data) throw new Error("Data missing");
-        
-        const result = JSON.parse(data.data);
-        expect(result.paths['/internal/status']).toBeUndefined();
-    });
-
-    it('should include deprecated endpoints when requested', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            filter: {
-                includeDeprecated: true,
-            },
-        });
-        
-        expect(data).toBeDefined();
-        if (!data) throw new Error("Data missing");
-
-        const result = JSON.parse(data.data);
-        expect(result.paths['/internal/status']).toBeDefined();
-    });
-
-    it('should remove unused components after filtering', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            filter: {
-                tags: { include: ['items'] },
-            },
-        });
-
-        expect(data).toBeDefined();
-        expect(data?.stats).toBeDefined();
-        if (!data || !data.stats) throw new Error("Data or stats missing");
-
-        const result = JSON.parse(data.data);
-        // Only '/items' path should remain
-        expect(Object.keys(result.paths)).toEqual(['/items']);
-        // Only 'Item' schema should remain, 'User' and 'UnusedSchema' should be gone
-        expect(Object.keys(result.components.schemas)).toEqual(['Item']);
-        expect(data.stats.before.schemas).toBe(3);
-        expect(data.stats.after.schemas).toBe(1);
-    });
-
-    it('should apply transformations like removing descriptions', async () => {
-        const { data } = await api.api.condense.post({
-            source: { content: JSON.stringify(sampleSpec), path: 'spec.json' },
-            output: { format: 'json' },
-            transform: {
-                removeDescriptions: true,
-            },
-        });
-
-        expect(data).toBeDefined();
-        if (!data) throw new Error("Data missing");
-
-        const result = JSON.parse(data.data);
-        expect(result.info.description).toBeUndefined();
-        expect(result.paths['/users'].get.description).toBeUndefined();
-        expect(result.components.schemas.User.properties.id.description).toBeUndefined();
-    });
-
-    it('should return 400 for invalid source content', async () => {
-        const { error, status } = await api.api.condense.post({
-            source: {
-              content: 'this is not a valid json or yaml',
-              path: 'spec.json',
-            },
-            output: { format: 'json' },
-        });
-
-        expect(status).toBe(400);
-
-        if (error?.value && 'success' in error.value && 'errors' in error.value && Array.isArray(error.value.errors)) {
-            expect(error.value.success).toBe(false);
-            expect(error.value.errors).toContain('Error extracting OpenAPI: Error processing spec: Failed to parse content from \'spec.json\'. Not valid JSON or YAML.');
-        } else {
-            throw new Error('Unexpected error response format');
-        }
-    });
-  });
-});
 ```
 
 ## File: tsconfig.json
@@ -2692,231 +1783,6 @@ export type OpenAPIExtractorResult = {
 export type SchemaTransformer = (
   schema: OpenAPIV3.SchemaObject,
 ) => OpenAPIV3.SchemaObject;
-```
-
-## File: src/backend/extractor.ts
-```typescript
-import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
-import { fetchSpec } from './utils/fetcher';
-import { transformOpenAPI } from './transformer';
-import { getFormatter } from './formatters';
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { OpenAPIV3, OpenAPI } from 'openapi-types';
-import { HTTP_METHODS } from '../shared/constants';
-
-export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
-  if (!spec || typeof spec !== 'object') {
-    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
-  }
-
-  const compactSpecString = JSON.stringify(spec);
-  const prettySpecString = JSON.stringify(spec, null, 2);
-
-  const charCount = prettySpecString.length;
-  const lineCount = prettySpecString.split('\n').length;
-  // Rough approximation of token count, as it varies by model.
-  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
-  const tokenCount = Math.ceil(compactSpecString.length / 4);
-
-  const validMethods = new Set(HTTP_METHODS);
-  const paths = Object.keys(spec.paths || {});
-  const operations = paths.reduce((count, path) => {
-    const pathItem = spec.paths[path];
-    if (pathItem && typeof pathItem === 'object') {
-      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
-    }
-    return count;
-  }, 0);
-  const schemas = Object.keys(spec.components?.schemas || {}).length;
-
-  return {
-    paths: paths.length,
-    operations: operations,
-    schemas: schemas,
-    charCount,
-    lineCount,
-    tokenCount,
-  };
-};
-
-export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
-    const charCount = output.length;
-    const lineCount = output.split('\n').length;
-    const tokenCount = Math.ceil(charCount / 4);
-
-    return { charCount, lineCount, tokenCount };
-}
-
-const isV3Document = (
-  doc: OpenAPI.Document,
-): doc is OpenAPIV3.Document => {
-  return 'openapi' in doc && doc.openapi.startsWith('3');
-};
-
-/**
- * Extract OpenAPI information based on configuration
- */
-export const extractOpenAPI = async (
-  config: ExtractorConfig
-): Promise<OpenAPIExtractorResult> => {
-  try {
-    // Fetch OpenAPI spec
-    const result = await fetchSpec(config.source);
-    
-    if (!result.success || !result.data) {
-      return result;
-    }
-    
-    if (typeof result.data === 'string') {
-      return {
-        success: false,
-        errors: ['Invalid spec format after fetching. Expected a document object.'],
-      };
-    }
-    
-    if (!isV3Document(result.data)) {
-      return {
-        success: false,
-        errors: ['Only OpenAPI v3 documents are supported.'],
-      };
-    }
-    
-    const beforeStats = calculateSpecStats(result.data);
-
-    // Apply transformations
-    const transformed = transformOpenAPI(
-      result.data,
-      config.filter,
-      config.transform
-    );
-    
-    const afterSpecStats = calculateSpecStats(transformed);
-    
-    // Format output
-    const formatter = getFormatter(config.output.format);
-    const formattedOutput = formatter.format(transformed);
-    
-    const afterOutputStats = calculateOutputStats(formattedOutput);
-
-    const afterStats: SpecStats = {
-      ...afterSpecStats,
-      ...afterOutputStats,
-    };
-    // Write output to file if destination is provided
-    if (config.output.destination) {
-      const outputPath = config.output.destination;
-      await fs.mkdir(dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
-    }
-    
-    return {
-      success: true,
-      data: formattedOutput,
-      stats: {
-        before: beforeStats,
-        after: afterStats,
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
-    };
-  }
-};
-
-/**
- * Load configuration from file
- */
-export const loadConfig = async (
-  configPath: string = './openapi-condenser.config.ts'
-): Promise<ExtractorConfig> => {
-  try {
-    // Convert file path to URL for import()
-    const fileUrl = `file://${join(process.cwd(), configPath)}`;
-    
-    // Import configuration
-    const module = await import(fileUrl);
-    return module.default as ExtractorConfig;
-  } catch (error) {
-    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-};
-
-/**
- * Merge command line arguments with configuration
- */
-export const mergeWithCommandLineArgs = (
-  config: ExtractorConfig,
-  args: Record<string, any>
-): ExtractorConfig => {
-  // Deep copy to avoid mutating the original config object
-  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
-  
-  // Override source settings
-  if (args.source) {
-    result.source.path = args.source;
-  }
-  
-  if (args.sourceType) {
-    result.source.type = args.sourceType as 'local' | 'remote';
-  }
-  
-  // Override output settings
-  if (args.format) {
-    result.output.format = args.format;
-  }
-  
-  if (args.outputPath) {
-    result.output.destination = args.outputPath;
-  }
-  
-  // Initialize filter if it doesn't exist
-  if (!result.filter) {
-    result.filter = {};
-  }
-  
-  // Override filter settings
-  if (args.includePaths) {
-    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
-  }
-  if (args.excludePaths) {
-    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
-  }
-  
-  if (args.includeTags) {
-    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
-  }
-  if (args.excludeTags) {
-    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
-  }
-  
-  if (args.methods) {
-    result.filter.methods = args.methods.split(',');
-  }
-  
-  if (args.includeDeprecated) {
-    result.filter.includeDeprecated = args.includeDeprecated;
-  }
-
-  // Initialize transform if it doesn't exist
-  if (!result.transform) {
-    result.transform = {};
-  }
-
-  if (args.excludeSchemas) {
-    result.transform.includeSchemas = false;
-  }
-  if (args.excludeRequestBodies) {
-    result.transform.includeRequestBodies = false;
-  }
-  if (args.excludeResponses) {
-    result.transform.includeResponses = false;
-  }
-  
-  return result;
-};
 ```
 
 ## File: src/backend/transformer.ts
@@ -3314,6 +2180,232 @@ export const composeTransformers =
     );
 ```
 
+## File: src/backend/extractor.ts
+```typescript
+import type { ExtractorConfig, OpenAPIExtractorResult, SpecStats } from './types';
+import { fetchSpec } from './utils/fetcher';
+import { transformOpenAPI } from './transformer';
+import { getFormatter } from './formatters';
+import { promises as fs } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { OpenAPIV3, OpenAPI } from 'openapi-types';
+import { HTTP_METHODS } from '../shared/constants';
+import { DEFAULT_CONFIG_PATH, TOKEN_CHAR_RATIO } from './constants';
+
+export const calculateSpecStats = (spec: OpenAPIV3.Document): SpecStats => {
+  if (!spec || typeof spec !== 'object') {
+    return { paths: 0, operations: 0, schemas: 0, charCount: 0, lineCount: 0, tokenCount: 0 };
+  }
+
+  const compactSpecString = JSON.stringify(spec);
+  const prettySpecString = JSON.stringify(spec, null, 2);
+
+  const charCount = prettySpecString.length;
+  const lineCount = prettySpecString.split('\n').length;
+  // Rough approximation of token count, as it varies by model.
+  // 1 token is roughly 4 characters for English text. Use compact for better estimation.
+  const tokenCount = Math.ceil(compactSpecString.length / TOKEN_CHAR_RATIO);
+
+  const validMethods = new Set(HTTP_METHODS);
+  const paths = Object.keys(spec.paths || {});
+  const operations = paths.reduce((count, path) => {
+    const pathItem = spec.paths[path];
+    if (pathItem && typeof pathItem === 'object') {
+      return count + Object.keys(pathItem).filter(method => validMethods.has(method)).length;
+    }
+    return count;
+  }, 0);
+  const schemas = Object.keys(spec.components?.schemas || {}).length;
+
+  return {
+    paths: paths.length,
+    operations: operations,
+    schemas: schemas,
+    charCount,
+    lineCount,
+    tokenCount,
+  };
+};
+
+export const calculateOutputStats = (output: string): Pick<SpecStats, 'charCount' | 'lineCount' | 'tokenCount'> => {
+    const charCount = output.length;
+    const lineCount = output.split('\n').length;
+    const tokenCount = Math.ceil(charCount / TOKEN_CHAR_RATIO);
+
+    return { charCount, lineCount, tokenCount };
+}
+
+const isV3Document = (
+  doc: OpenAPI.Document,
+): doc is OpenAPIV3.Document => {
+  return 'openapi' in doc && doc.openapi.startsWith('3');
+};
+
+/**
+ * Extract OpenAPI information based on configuration
+ */
+export const extractOpenAPI = async (
+  config: ExtractorConfig
+): Promise<OpenAPIExtractorResult> => {
+  try {
+    // Fetch OpenAPI spec
+    const result = await fetchSpec(config.source);
+    
+    if (!result.success || !result.data) {
+      return result;
+    }
+    
+    if (typeof result.data === 'string') {
+      return {
+        success: false,
+        errors: ['Invalid spec format after fetching. Expected a document object.'],
+      };
+    }
+    
+    if (!isV3Document(result.data)) {
+      return {
+        success: false,
+        errors: ['Only OpenAPI v3 documents are supported.'],
+      };
+    }
+    
+    const beforeStats = calculateSpecStats(result.data);
+
+    // Apply transformations
+    const transformed = transformOpenAPI(
+      result.data,
+      config.filter,
+      config.transform
+    );
+    
+    const afterSpecStats = calculateSpecStats(transformed);
+    
+    // Format output
+    const formatter = getFormatter(config.output.format);
+    const formattedOutput = formatter.format(transformed);
+    
+    const afterOutputStats = calculateOutputStats(formattedOutput);
+
+    const afterStats: SpecStats = {
+      ...afterSpecStats,
+      ...afterOutputStats,
+    };
+    // Write output to file if destination is provided
+    if (config.output.destination) {
+      const outputPath = config.output.destination;
+      await fs.mkdir(dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, formattedOutput, 'utf-8');
+    }
+    
+    return {
+      success: true,
+      data: formattedOutput,
+      stats: {
+        before: beforeStats,
+        after: afterStats,
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errors: [`Error extracting OpenAPI: ${error instanceof Error ? error.message : String(error)}`]
+    };
+  }
+};
+
+/**
+ * Load configuration from file
+ */
+export const loadConfig = async (
+  configPath: string = DEFAULT_CONFIG_PATH
+): Promise<ExtractorConfig> => {
+  try {
+    // Convert file path to URL for import()
+    const fileUrl = `file://${join(process.cwd(), configPath)}`;
+    
+    // Import configuration
+    const module = await import(fileUrl);
+    return module.default as ExtractorConfig;
+  } catch (error) {
+    throw new Error(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+/**
+ * Merge command line arguments with configuration
+ */
+export const mergeWithCommandLineArgs = (
+  config: ExtractorConfig,
+  args: Record<string, any>
+): ExtractorConfig => {
+  // Deep copy to avoid mutating the original config object
+  const result: ExtractorConfig = JSON.parse(JSON.stringify(config));
+  
+  // Override source settings
+  if (args.source) {
+    result.source.path = args.source;
+  }
+  
+  if (args.sourceType) {
+    result.source.type = args.sourceType as 'local' | 'remote';
+  }
+  
+  // Override output settings
+  if (args.format) {
+    result.output.format = args.format;
+  }
+  
+  if (args.outputPath) {
+    result.output.destination = args.outputPath;
+  }
+  
+  // Initialize filter if it doesn't exist
+  if (!result.filter) {
+    result.filter = {};
+  }
+  
+  // Override filter settings
+  if (args.includePaths) {
+    result.filter.paths = { ...result.filter.paths, include: args.includePaths.split(',') };
+  }
+  if (args.excludePaths) {
+    result.filter.paths = { ...result.filter.paths, exclude: args.excludePaths.split(',') };
+  }
+  
+  if (args.includeTags) {
+    result.filter.tags = { ...result.filter.tags, include: args.includeTags.split(',') };
+  }
+  if (args.excludeTags) {
+    result.filter.tags = { ...result.filter.tags, exclude: args.excludeTags.split(',') };
+  }
+  
+  if (args.methods) {
+    result.filter.methods = args.methods.split(',');
+  }
+  
+  if (args.includeDeprecated) {
+    result.filter.includeDeprecated = args.includeDeprecated;
+  }
+
+  // Initialize transform if it doesn't exist
+  if (!result.transform) {
+    result.transform = {};
+  }
+
+  if (args.excludeSchemas) {
+    result.transform.includeSchemas = false;
+  }
+  if (args.excludeRequestBodies) {
+    result.transform.includeRequestBodies = false;
+  }
+  if (args.excludeResponses) {
+    result.transform.includeResponses = false;
+  }
+  
+  return result;
+};
+```
+
 ## File: src/backend/server.ts
 ```typescript
 import { Elysia, t } from 'elysia';
@@ -3323,6 +2415,8 @@ import { extractOpenAPI } from './extractor';
 import type { ExtractorConfig, SpecStats } from './types';
 import { resolve } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { API_PORT } from '../shared/constants';
+import { USER_AGENT } from './constants';
 
 // Basic SSRF protection. For production, a more robust solution like an allow-list or a proxy is recommended.
 const isPrivateIP = (ip: string) => {
@@ -3417,7 +2511,7 @@ export const app = new Elysia()
         }
       }
 
-      const response = await fetch(url, { headers: { 'User-Agent': 'OpenAPI-Condenser/1.0' } });
+      const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
       
       if (!response.ok) {
         // Pass through the status code from the remote server if it's an error
@@ -3590,7 +2684,7 @@ export const app = new Elysia()
 export type App = typeof app;
 
 if (import.meta.main) {
-  app.listen(3000);
+  app.listen(API_PORT);
   console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 }
 ```
@@ -3606,6 +2700,7 @@ import {
   StatsPanel,
 } from './components/features';
 import { usePanelEntrance } from './state/motion.reuse';
+import { APP_SUBTITLE, APP_TITLE, NAV_LINKS } from './constants';
 
 export default function App() {
   const configPanelRef = useRef<HTMLDivElement>(null);
@@ -3620,22 +2715,22 @@ export default function App() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center">
             <h1 className="text-xl font-bold text-white mr-4">
-              <span className="text-cyan-400">OpenAPI</span> Condenser
+              <span className="text-cyan-400">{APP_TITLE.split(' ')[0]}</span> {APP_TITLE.split(' ')[1]}
             </h1>
-            <p className="text-sm text-slate-400 hidden sm:block">Pack your OpenAPI into AI-friendly formats</p>
+            <p className="text-sm text-slate-400 hidden sm:block">{APP_SUBTITLE}</p>
           </div>
           <nav className="flex items-center gap-4">
-            <a href="/sdk" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+            <a href={NAV_LINKS.SDK} className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
               SDK
             </a>
-            <a href="/swagger" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+            <a href={NAV_LINKS.API} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
               API
             </a>
-            <a href="https://github.com/repomix/openapi-condenser" target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+            <a href={NAV_LINKS.GITHUB} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-400 hover:text-cyan-400 transition-colors">
               GitHub
             </a>
             <a 
-              href="https://github.com/sponsors/repomix" 
+              href={NAV_LINKS.SPONSOR} 
               target="_blank" 
               rel="noopener noreferrer" 
               className="ml-2 px-3 py-1 text-sm bg-gradient-to-r from-pink-500 to-orange-500 text-white font-medium rounded-md hover:from-pink-600 hover:to-orange-600 transition-colors"
@@ -3716,6 +2811,7 @@ export default function App() {
     "openapi-types": "^12.1.3",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "repomix": "^0.3.9",
     "yaml": "^2.3.4"
   }
 }

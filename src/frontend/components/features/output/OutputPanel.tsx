@@ -26,7 +26,7 @@ export const OutputPanel: React.FC<{}> = () => {
 
   const [copyStatus, setCopyStatus] = useState('Copy');
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     if (copyStatus === 'Copied!') {
@@ -35,21 +35,14 @@ export const OutputPanel: React.FC<{}> = () => {
     }
   }, [copyStatus]);
 
-  // Setup scroll listener for fullscreen mode
+  // Sync isFullScreen state with the browser's fullscreen status
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || isFullScreen) return;
-
-    const handleScroll = () => {
-      // If user starts scrolling and we have lots of content, go fullscreen
-      if (container.scrollTop > 20 && output.split('\n').length > 30) {
-        setIsFullScreen(true);
-      }
+    const handleFullscreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
     };
-    
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [output, isFullScreen]);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(output);
@@ -69,15 +62,25 @@ export const OutputPanel: React.FC<{}> = () => {
   }, [output, format]);
   
   const handleToggleFullscreen = useCallback(() => {
-    setIsFullScreen(prev => !prev);
+    if (!panelRef.current) return;
+    
+    if (!document.fullscreenElement) {
+      panelRef.current.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
   }, []);
   
   const panelClasses = isFullScreen 
-    ? "fixed inset-0 z-50 bg-slate-900 flex flex-col"
+    ? "bg-slate-900 flex flex-col"
     : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
 
   return (
-    <div className={panelClasses}>
+    <div ref={panelRef} className={panelClasses}>
       <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
         <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
         <div className="flex items-center gap-2">
@@ -92,7 +95,7 @@ export const OutputPanel: React.FC<{}> = () => {
             )}
         </div>
       </div>
-      <div ref={scrollContainerRef} className="flex-grow p-1 relative overflow-auto">
+      <div className="flex-grow p-1 relative overflow-auto">
         {isLoading && <SkeletonLoader />}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
