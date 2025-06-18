@@ -227,3 +227,9 @@ Failed to load resource: the server responded with a status of 400 (Bad Request)
 
 1. FE: tranformation toggle switch has bug not reacting but working, but no animation
 2. add scroll to bottom and top button at certain scroll position
+
+-----------
+
+1. FE: add invisible scrollable to transformation item switch
+2. FE: output panel can be collapse/decollapse by its header click
+3. BE FE: add transformation include/exclude config item named include `endpoint paths summary` to show at the beginning of the output

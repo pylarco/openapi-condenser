@@ -387,6 +387,14 @@ export const transformOpenAPI = (
     }
   }
 
+  // 6. Add endpoint paths summary if requested.
+  if (transformOpts?.includeEndpointPathsSummary && transformed.paths) {
+    const paths = Object.keys(transformed.paths);
+    if (paths.length > 0) {
+      (transformed as any)['x-endpoint-paths-summary'] = paths;
+    }
+  }
+
   return transformed;
 };
 

@@ -96,6 +96,7 @@ export const app = new Elysia()
           includeSchemas: body.transform?.includeSchemas ?? true,
           includeRequestBodies: body.transform?.includeRequestBodies ?? true,
           includeResponses: body.transform?.includeResponses ?? true,
+          includeEndpointPathsSummary: body.transform?.includeEndpointPathsSummary ?? false,
         },
       };
 
@@ -175,6 +176,7 @@ export const app = new Elysia()
             includeSchemas: t.Optional(t.Boolean()),
             includeRequestBodies: t.Optional(t.Boolean()),
             includeResponses: t.Optional(t.Boolean()),
+            includeEndpointPathsSummary: t.Optional(t.Boolean()),
           })
         ),
       }),

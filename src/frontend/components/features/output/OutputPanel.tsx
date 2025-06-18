@@ -25,6 +25,7 @@ export const OutputPanel: React.FC<{}> = () => {
 
   const [copyStatus, setCopyStatus] = useState('Copy');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -74,14 +75,29 @@ export const OutputPanel: React.FC<{}> = () => {
     }
   }, []);
   
+  const handleToggleCollapse = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) {
+        return;
+    }
+    setIsCollapsed(!isCollapsed);
+  };
+
   const panelClasses = isFullScreen 
     ? "bg-slate-900 flex flex-col"
-    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg min-h-[20rem] flex flex-col";
+    : "bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-lg flex flex-col";
 
   return (
     <div ref={panelRef} className={panelClasses}>
-      <div className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
+      <div 
+        onClick={handleToggleCollapse}
+        className="flex items-center justify-between p-3 border-b border-slate-700/50 flex-shrink-0 cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white">Condensed Output</h3>
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+        </div>
         <div className="flex items-center gap-2">
             <button onClick={handleToggleFullscreen} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-md transition-colors">
                 {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
@@ -94,32 +110,34 @@ export const OutputPanel: React.FC<{}> = () => {
             )}
         </div>
       </div>
-      <div className="flex-grow p-1 relative overflow-auto">
-        {isLoading && <SkeletonLoader />}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
-                <p className="font-bold mb-2">An error occurred:</p>
-                <pre className="whitespace-pre-wrap">{error}</pre>
+      {!isCollapsed && (
+        <div className="flex-grow p-1 relative overflow-auto min-h-[20rem]">
+            {isLoading && <SkeletonLoader />}
+            {error && (
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+                <div className="bg-red-900/50 border border-red-500 text-red-300 p-4 rounded-lg text-sm max-w-full overflow-auto">
+                    <p className="font-bold mb-2">An error occurred:</p>
+                    <pre className="whitespace-pre-wrap">{error}</pre>
+                </div>
             </div>
-          </div>
-        )}
-        {!isLoading && !error && output && (
-            <CodeMirror
-                value={output}
-                height="100%"
-                extensions={[languageMap[format](), oneDark]}
-                readOnly={true}
-                theme="dark"
-                style={{ height: '100%', minHeight: '100%' }}
-            />
-        )}
-        {!isLoading && !error && !output && (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-                <p>Your condensed OpenAPI spec will appear here.</p>
-            </div>
-        )}
-      </div>
+            )}
+            {!isLoading && !error && output && (
+                <CodeMirror
+                    value={output}
+                    height="100%"
+                    extensions={[languageMap[format](), oneDark]}
+                    readOnly={true}
+                    theme="dark"
+                    style={{ height: '100%', minHeight: '100%' }}
+                />
+            )}
+            {!isLoading && !error && !output && (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                    <p>Your condensed OpenAPI spec will appear here.</p>
+                </div>
+            )}
+        </div>
+      )}
     </div>
   );
 };

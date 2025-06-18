@@ -27,6 +27,7 @@ export interface TransformOptions {
   includeSchemas?: boolean;
   includeRequestBodies?: boolean;
   includeResponses?: boolean;
+  includeEndpointPathsSummary?: boolean;
 }
 
 export type Source =

@@ -191,6 +191,16 @@ const formatSchema = (name: string, schemaRef: OpenAPIV3.SchemaObject | OpenAPIV
 export const formatAsConciseText = (data: OpenAPIV3.Document): string => {
   const parts: string[] = [];
 
+  // Endpoint Paths Summary
+  if ((data as any)['x-endpoint-paths-summary'] && Array.isArray((data as any)['x-endpoint-paths-summary'])) {
+      const paths: string[] = (data as any)['x-endpoint-paths-summary'];
+      if (paths.length > 0) {
+          let summaryBlock = "## Endpoint Paths Summary\n\n";
+          summaryBlock += paths.map(p => `* \`${p}\``).join('\n');
+          parts.push(summaryBlock);
+      }
+  }
+
   // Info Block
   if (data.info) {
     let infoBlock = `# ${data.info.title}`;

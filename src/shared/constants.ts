@@ -30,5 +30,6 @@ export const defaultConfig: { filter: FilterOptions, transform: TransformOptions
     includeSchemas: true,
     includeRequestBodies: true,
     includeResponses: true,
+    includeEndpointPathsSummary: false,
   },
 };

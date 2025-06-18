@@ -31,3 +31,11 @@ body {
 [class*="z-"] {
   transform: translateZ(0);
 }
+
+.invisible-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.invisible-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
