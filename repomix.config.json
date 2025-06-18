@@ -34,9 +34,9 @@
     "useGitignore": true,
     "useDefaultPatterns": true,
     "customPatterns": [
-      "src/frontend/components",
-      "src/frontend/styles.css",
-      "src/shared"
+      // "src/frontend/components",
+      // "src/frontend/styles.css",
+      // "src/shared"
     ]
   },
   "security": {

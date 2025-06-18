@@ -1,6 +1,8 @@
 docs\apply.md
 docs\repomix-output.md
 
+.wrangler
+
 # dependencies (bun install)
 node_modules
 

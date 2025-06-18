@@ -7,8 +7,15 @@ import { API_PORT } from '../shared/constants';
 import { USER_AGENT } from './constants';
 import { checkUrlSafety } from './utils/ssrf';
 
-export const app = new Elysia({ aot: false })
-  .use(swagger())
+let app_builder = new Elysia({ aot: true });
+
+// Conditionally add Swagger only for local standalone execution.
+// This prevents issues with the Swagger UI plugin in serverless environments like Cloudflare Workers.
+if (import.meta.main) {
+  app_builder = app_builder.use(swagger());
+}
+
+export const app = app_builder
   .use(cors({
     origin: [/^http:\/\/localhost(:\d+)?$/, /\.pages\.dev$/],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
